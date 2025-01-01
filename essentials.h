@@ -5,9 +5,10 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define MAX_SIZE 100
+#define MAX_SIZE 150
 
 int GAME_X, GAME_Y;
+int D_X[] = {-1, 0, 1, 0}, D_Y[] = {0, 1, 0, -1}; // up, right, down, left
 
 struct Point {
     int x;
@@ -45,4 +46,14 @@ void init_user(struct User* user, int height, int width) {
     user->map = malloc(sizeof(char *) * GAME_X);
     for (int i = 0; i < GAME_Y; i++)
         user->map[i] = malloc(sizeof(char) * GAME_Y);
+}
+
+struct Point next_point(struct Point p, int dir) {
+    p.x += D_X[dir];
+    p.y += D_Y[dir];
+    return p;
+}
+
+int is_in_map(struct Point p) {
+    return p.x >= 0 && p.y >= 0 && p.x < GAME_X && p.y < GAME_Y;
 }

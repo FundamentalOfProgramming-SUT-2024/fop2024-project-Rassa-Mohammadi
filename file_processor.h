@@ -14,6 +14,16 @@ char* get_password(char username[MAX_SIZE]) {
     return res;
 }
 
+char* get_email(char username[MAX_SIZE]) {
+    char *path = get_address(username);
+    FILE *fptr = fopen(path, "r");
+    char *res = malloc(sizeof(char) * MAX_SIZE);
+    for (int i = 0; i < 3; i++)
+        fgets(res, MAX_SIZE, fptr);
+    res[strlen(res) - 1] = '\0';
+    return res;
+}
+
 int exist_username(char username[MAX_SIZE]) {
     char *path = get_address(username);
     FILE *fptr = fopen(path, "r");

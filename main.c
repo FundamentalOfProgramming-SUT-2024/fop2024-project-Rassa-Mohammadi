@@ -17,12 +17,12 @@ struct User user;
 
 int main() {
     initscr();
-    init_user(&user, 34, 125);
+    init_user(&user, 30, 120); // 34, 125
     keypad(stdscr, TRUE);
     srand(time(NULL));
     set_colors();
     create_game_menu();
-    pregame_menu();
+    play_game();
     quit_game();
 }
 
@@ -58,13 +58,17 @@ void create_game_menu() {
         }
         key = getch();
     } while (key != '\n');
-    if (choice == 0)
+    if (choice == 0) {
         create_login_page();
-    else if (choice == 1)
+        pregame_menu();
+    }
+    else if (choice == 1) {
         create_register_page();
-    /*else if (choice == 2)
-        play as guest;       
-    */
+        pregame_menu();
+    }
+    else if (choice == 2) {
+        generate_map(&user.map);
+    }
     else // quit
         quit_game();
 }
@@ -121,6 +125,7 @@ void create_login_page() {
             clean_area(create_point(x + 1, y), create_point(x + 1, COLS - 1));
         }
     }
+    strcpy(user.email, get_email(user.username));
 }
 
 void create_register_page() {
@@ -234,10 +239,10 @@ void pregame_menu() {
         }
     }
     else { // create new game
+        clear();
         generate_map(&user.map);
         update_user(user);
     }
-    play_game();
 }
 
 void play_game() {
@@ -248,12 +253,19 @@ void play_game() {
 
 void quit_game() {
     usleep(500000);
+    refresh();
     clear();
     curs_set(FALSE);
     int x = LINES / 3, y = COLS / 3;
     mvprintw(x, y, "Game over!");
     mvprintw(x + 1, y, "Press any key to exit ...");
-    getch();
+    refresh();
+    // getch();
+    int key = getch();
+    if (key == '\n') {
+        pregame_menu();
+        quit_game();
+    }
     endwin();
     exit(0);
 }
