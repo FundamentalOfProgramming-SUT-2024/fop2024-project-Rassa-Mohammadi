@@ -14,16 +14,6 @@ char* get_password(char username[MAX_SIZE]) {
     return res;
 }
 
-char* get_email(char username[MAX_SIZE]) {
-    char *path = get_address(username);
-    FILE *fptr = fopen(path, "r");
-    char *res = malloc(sizeof(char) * MAX_SIZE);
-    for (int i = 0; i < 3; i++)
-        fgets(res, MAX_SIZE, fptr);
-    res[strlen(res) - 1] = '\0';
-    return res;
-}
-
 int exist_username(char username[MAX_SIZE]) {
     char *path = get_address(username);
     FILE *fptr = fopen(path, "r");
@@ -129,35 +119,70 @@ void create_user(char username[], char password[], char email[]) {
     fclose(fptr);
 }
 
-int load_map(char username[], char ***map) {
-    char *path = get_address(username);
+void load_user(struct User* user) {
+    char *path = get_address(user->username);
+    FILE *fptr = fopen(path, "r");
+    char line[MAX_SIZE];
+    fgets(line, MAX_SIZE, fptr); // username;
+    fgets(line, MAX_SIZE, fptr); // password
+    fgets(line, MAX_SIZE, fptr); // email
+    trim(line);
+    strcpy(user->email, line);
+    fgets(line, MAX_SIZE, fptr); // score
+    trim(line);
+    user->score = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // gold
+    trim(line);
+    user->gold = get_num(line);
+    for (int i = 0; i < GAME_X; i++) { // map
+        fgets(line, MAX_SIZE, fptr);
+        for (int j = 0; j < GAME_Y; j++)
+            (user->map)[i][j] = line[j];
+    }
+    for (int i = 0; i < GAME_X; i++) { // mask
+        fgets(line, MAX_SIZE, fptr);
+        for (int j = 0; j < GAME_Y; j++)
+            (user->mask)[i][j] = line[j] - '0';
+    }
+    fgets(line, MAX_SIZE, fptr); // user.pos
+    trim(line);
+    char *token = strtok(line, " ");
+    user->pos.x = get_num(token);
+    token = strtok(NULL, " ");
+    user->pos.y = get_num(token);
+}
+
+int has_map(struct User* user) {
+    char *path = get_address(user->username);
     FILE *fptr = fopen(path, "r");
     char line[MAX_SIZE];
     for (int i = 0; i < 6; i++)
-        if (fgets(line, MAX_SIZE, fptr) == NULL)
+        if (fgets(line, MAX_SIZE, fptr) == NULL) {
+            fclose(fptr);
             return 0;
-    for (int i = 0; i < GAME_X; i++) {
-        for (int j = 0; j < GAME_Y; j++)
-            (*map)[i][j] = line[j];
-        fgets(line, MAX_SIZE, fptr);
-    }
-    refresh();
+        }
     fclose(fptr);
     return 1;
 }
 
-void update_user(struct User user) {
-    char *path = get_address(user.username);
+void update_user(struct User* user) {
+    char *path = get_address(user->username);
     FILE *fptr = fopen(path, "w");
-    fprintf(fptr, "%s\n", user.username);
-    fprintf(fptr, "%s\n", user.password);
-    fprintf(fptr, "%s\n", user.email);
-    fprintf(fptr, "%d\n", user.score);
-    fprintf(fptr, "%d\n", user.gold);
+    fprintf(fptr, "%s\n", user->username);
+    fprintf(fptr, "%s\n", user->password);
+    fprintf(fptr, "%s\n", user->email);
+    fprintf(fptr, "%d\n", user->score);
+    fprintf(fptr, "%d\n", user->gold);
     for (int i = 0; i < GAME_X; i++) {
         for (int j = 0; j < GAME_Y; j++)
-            fprintf(fptr, "%c", user.map[i][j]);
+            fprintf(fptr, "%c", (user->map)[i][j]);
         fprintf(fptr, "\n");
     }
+    for (int i = 0; i < GAME_X; i++) {
+        for (int j = 0; j < GAME_Y; j++)
+            fprintf(fptr, "%d", (user->mask)[i][j]);
+        fprintf(fptr, "\n");
+    }
+    fprintf(fptr, "%d %d\n", user->pos.x, user->pos.y);
     fclose(fptr);
 }

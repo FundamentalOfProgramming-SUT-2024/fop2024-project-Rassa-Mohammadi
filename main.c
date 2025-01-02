@@ -11,11 +11,13 @@ void create_login_page();
 void create_register_page();
 void pregame_menu();
 void play_game();
+void move_player();
 void quit_game();
 
 struct User user;
 
 int main() {
+    setlocale(LC_ALL, "");
     initscr();
     init_user(&user, 30, 120); // 34, 125
     keypad(stdscr, TRUE);
@@ -67,7 +69,7 @@ void create_game_menu() {
         pregame_menu();
     }
     else if (choice == 2) {
-        generate_map(&user.map);
+        generate_map(&user);
     }
     else // quit
         quit_game();
@@ -125,7 +127,7 @@ void create_login_page() {
             clean_area(create_point(x + 1, y), create_point(x + 1, COLS - 1));
         }
     }
-    strcpy(user.email, get_email(user.username));
+    load_user(&user);
 }
 
 void create_register_page() {
@@ -151,7 +153,7 @@ void create_register_page() {
     x += 3;
     while (true) {
         mvprintw(x, y, "Enter Password:");
-        print_message(create_point(x + 2, y - 30), "Password must contain at least 7 characters, 1 number character, 1 Capital letter and 1 small letter.");
+        print_message(create_point(x + 2, y - 30), "Password must contain at least 7 characters, 1 number character, 1 capital letter and 1 small letter.");
         print_message(create_point(x + 3, y), "To generate password press space button");
         move(x + 1, y);
         noecho();
@@ -230,7 +232,7 @@ void pregame_menu() {
         key = getch();
     } while (key != '\n');
     if (choice == 0) { // load game
-        if (!load_map(user.username, &user.map)) {
+        if (!has_map(&user)) {
             clear();
             print_message(create_point(LINES / 3, COLS / 3), "There is no previous name for this account!");
             print_message(create_point(LINES / 3 + 1, COLS / 3), "Press any key to return to the previous menu.");
@@ -239,16 +241,49 @@ void pregame_menu() {
         }
     }
     else { // create new game
-        clear();
-        generate_map(&user.map);
-        update_user(user);
+        generate_map(&user);
+        update_user(&user);
+    }
+}
+
+void move_player(int key) {
+    struct Point nxt;
+    if (key == KEY_UP) {
+        nxt = next_point(user.pos, 0);
+        if (is_in_map(nxt) && not_restricted(&user.map, nxt))
+            user.pos.x = nxt.x, user.pos.y = nxt.y;
+    }
+    else if (key == KEY_RIGHT) {
+        nxt = next_point(user.pos, 1);
+        if (is_in_map(nxt) && not_restricted(&user.map, nxt))
+            user.pos.x = nxt.x, user.pos.y = nxt.y;
+    }
+    else if (key == KEY_DOWN) {
+        nxt = next_point(user.pos, 2);
+        if (is_in_map(nxt) && not_restricted(&user.map, nxt))
+            user.pos.x = nxt.x, user.pos.y = nxt.y;
+    }
+    else if (key == KEY_LEFT) {
+        nxt = next_point(user.pos, 3);
+        if (is_in_map(nxt) && not_restricted(&user.map, nxt))
+            user.pos.x = nxt.x, user.pos.y = nxt.y;
     }
 }
 
 void play_game() {
     clear();
-    print_map(&user.map);
-    getch();
+    print_message(create_point(0, 0), "Press (E) to exit game.");
+    refresh();
+    int key;
+    timeout(0);
+    do {
+        print_map(&user.map);
+        mvprintw(user.pos.x + ST_X, user.pos.y + ST_Y, "$");
+        refresh();
+        key = getch();
+        move_player(key);
+    } while (key != 'E');
+    timeout(-1);
 }
 
 void quit_game() {
@@ -262,10 +297,10 @@ void quit_game() {
     refresh();
     // getch();
     int key = getch();
-    if (key == '\n') {
-        pregame_menu();
-        quit_game();
-    }
+    // if (key == '\n') {
+    //     pregame_menu();
+    //     quit_game();
+    // }
     endwin();
     exit(0);
 }
