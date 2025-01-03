@@ -37,8 +37,10 @@ void clean_area(struct Point top_left, struct Point bottom_right) {
             mvprintw(i, j, " ");
 }
 
-int create_room(char ***map, struct Point p, int height, int width, struct Point** rooms, int index) {
+int create_room(char ***map, struct Point p, int height, int width, struct Room** rooms, int index) {
     // create border
+    if ((*map)[p.x][p.y] != ' ' || (*map)[p.x][p.y + width + 1] != ' ')
+        return 0;
     (*map)[p.x][p.y] = '_'; // top left
     (*map)[p.x][p.y + width + 1] = '_'; // top right
     for (int j = 0; j < width; j++) {
@@ -47,6 +49,8 @@ int create_room(char ***map, struct Point p, int height, int width, struct Point
         (*map)[p.x][p.y + 1 + j] = '_';
         (*map)[p.x + height + 1][p.y + 1 + j] = '_';
     }
+    if ((*map)[p.x + height + 1][p.y] != ' ' || (*map)[p.x + height + 1][p.y + width + 1] != ' ')
+        return 0;
     (*map)[p.x + height + 1][p.y] = '|'; // bottom left
     (*map)[p.x + height + 1][p.y + width + 1] = '|'; // bottom right
     for (int i = 0; i < height; i++) {
@@ -62,7 +66,18 @@ int create_room(char ***map, struct Point p, int height, int width, struct Point
                 return 0;
             (*map)[p.x + 1 + i][p.y + 1 + j] = '.';
         }
-    (*rooms)[index] = create_point(p.x + height / 2, p.y + width / 2);
+    // create pillar
+    int number_of_pillars = rand() % 2;
+    struct Point pillar;
+    if (number_of_pillars) {
+        pillar.x = p.x + 2 + rand() % (height - 2);
+        pillar.y = p.y + 2 + rand() % (width - 2);
+        (*map)[pillar.x][pillar.y] = 'O';
+    }
+    (*rooms)[index].p = create_point(p.x, p.y);
+    (*rooms)[index].height = height;
+    (*rooms)[index].width = width;
+    (*rooms)[index].type = 'n'; // normal room
     corners[4 * index] = create_point(p.x, p.y);
     corners[4 * index + 1] = create_point(p.x + height + 1, p.y);
     corners[4 * index + 2] = create_point(p.x, p.y + width + 1);
@@ -121,35 +136,73 @@ void clear_map(char ***map) {
             (*map)[i][j] = ' ';
 }
 
+void determine_initial_position(struct User* user) {
+    do {
+        user->pos.x = rand() % GAME_X;
+        user->pos.y = rand() % GAME_Y;
+    } while (!is_in_room(&user->map, user->pos) || (user->map)[user->pos.x][user->pos.y] == 'O');
+}
+
+void generate_traps(struct User* user, struct Room** rooms) {
+    for (int i = 0; i < number_of_rooms; i++) {
+        if ((*rooms)[i].type == 'n') { // normal room
+            int number_of_traps = rand() % 2;
+            while (number_of_traps--) {
+                struct Point pos = create_point((*rooms)[i].p.x + rand() % (*rooms)[i].height, (*rooms)[i].p.y + rand() % (*rooms)[i].width);
+                user->trap[pos.x][pos.y].exist = 1;
+                user->trap[pos.x][pos.y].damage = 1 + rand() % 3;
+            }
+        }
+        // else
+    }
+}
+
 void generate_map(struct User* user) {
+    init_user(user);
     char ***map = &(user->map);
     int valid_map = 1;
     number_of_rooms = 6 + rand() % 5;
-    struct Point* rooms = malloc(sizeof(struct Point) * number_of_rooms);
+    struct Room* rooms = malloc(sizeof(struct Room) * number_of_rooms);
     corners = malloc(sizeof(struct Point) * number_of_rooms * 4);
     do {
         valid_map = 1;
         clear_map(map);
         for (int i = 0; i < number_of_rooms; i++) {
-            int height = 4 + rand() % 3, width = 4 + rand() % 10;
+            int height = 4 + rand() % 5, width = 4 + rand() % 15;
             int x = rand() % (GAME_X - height - 1), y = rand() % (GAME_Y - width - 1);
             valid_map &= create_room(map, create_point(x, y), height, width, &rooms, i);
         }
         for (int i = 0; i < number_of_rooms - 1; i++) {
-            create_corridor(map, rooms[i], rooms[i + 1]);
+            struct Point p1 = create_point(rooms[i].p.x + rooms[i].height / 2, rooms[i].p.y + rooms[i].width / 2);
+            struct Point p2 = create_point(rooms[i + 1].p.x + rooms[i + 1].height / 2, rooms[i + 1].p.y + rooms[i + 1].width / 2);
+            create_corridor(map, p1, p2);
         }
         valid_map &= check_corners(map);
     } while (!valid_map);
-    int initial_room = rand() % number_of_rooms;
-    user->pos.x = rooms[initial_room].x, user->pos.y = rooms[initial_room].y;
     trim_rooms(map);
+    determine_initial_position(user);
+    generate_traps(user, &rooms);
 }
 
-void print_map(char ***map) {
+void print_map(struct User* user) {
+    print_message(create_point(0, 0), "Press (Q) to exit game.");
     for (int i = 0; i < GAME_X; i++) {
         move(ST_X + i, ST_Y);
         // move(i, 0);
-        for (int j = 0; j < GAME_Y; j++)
-            printw("%c", (*map)[i][j]);
+        for (int j = 0; j < GAME_Y; j++) {
+            if ((user->mask)[i][j])
+                printw("%c", (user->map)[i][j]);
+            else
+                printw(" ");
+        }
     }
+}
+
+void print_status(struct User* user) {
+    move(GAME_X + ST_X, GAME_Y / 3);
+    attroff(COLOR_PAIR(1));
+    attron(COLOR_PAIR(3));
+    printw("Score: %d \t Gold: %d \t Health: %d\t", user->score, user->gold, user->health);
+    attroff(COLOR_PAIR(3));
+    attron(COLOR_PAIR(1));
 }

@@ -5,6 +5,7 @@ char* get_address(char username[MAX_SIZE]) {
     strcat(res, ".txt");
     return res;
 }
+
 char* get_password(char username[MAX_SIZE]) {
     char *path = get_address(username);
     FILE *fptr = fopen(path, "r");
@@ -110,8 +111,6 @@ void create_user(char username[], char password[], char email[]) {
     fprintf(fptr, "%s\n", username);
     fprintf(fptr, "%s\n", password);
     fprintf(fptr, "%s\n", email);
-    fprintf(fptr, "0\n"); // score
-    fprintf(fptr, "0\n"); // gold
     fclose(fptr);
     // add to users.txt
     fptr = fopen("users/users.txt", "a");
@@ -120,20 +119,17 @@ void create_user(char username[], char password[], char email[]) {
 }
 
 void load_user(struct User* user) {
+    init_user(user);
     char *path = get_address(user->username);
     FILE *fptr = fopen(path, "r");
     char line[MAX_SIZE];
     fgets(line, MAX_SIZE, fptr); // username;
     fgets(line, MAX_SIZE, fptr); // password
+    trim(line);
+    strcpy(user->password, line);
     fgets(line, MAX_SIZE, fptr); // email
     trim(line);
     strcpy(user->email, line);
-    fgets(line, MAX_SIZE, fptr); // score
-    trim(line);
-    user->score = get_num(line);
-    fgets(line, MAX_SIZE, fptr); // gold
-    trim(line);
-    user->gold = get_num(line);
     for (int i = 0; i < GAME_X; i++) { // map
         fgets(line, MAX_SIZE, fptr);
         for (int j = 0; j < GAME_Y; j++)
@@ -150,13 +146,53 @@ void load_user(struct User* user) {
     user->pos.x = get_num(token);
     token = strtok(NULL, " ");
     user->pos.y = get_num(token);
+    fgets(line, MAX_SIZE, fptr); // score
+    trim(line);
+    user->score = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // gold
+    trim(line);
+    user->gold = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // health
+    trim(line);
+    user->health = get_num(line);
+    for (int i = 0; i < GAME_X; i++) // traps
+        for (int j = 0; j < GAME_Y; j++) {
+            fgets(line, MAX_SIZE, fptr);
+            trim(line);
+            char *token = strtok(line, " ");
+            (user->trap)[i][j].exist = token[0] - '0';
+            token = strtok(NULL, " ");
+            (user->trap)[i][j].damage = get_num(token);
+        }
+    for (int i = 0; i < GAME_X; i++) // doors
+        for (int j = 0; j < GAME_Y; j++) {
+            fgets(line, MAX_SIZE, fptr);
+            trim(line);
+            char *token = strtok(line, " "); // exist, pos, is_opened, is_old, haspassword, password
+            (user->door)[i][j].exist = token[0] - '0';
+            token = strtok(NULL, " "); // pos.x
+            (user->door)[i][j].pos.x = get_num(token);
+            token = strtok(NULL, " "); // pos.y
+            (user->door)[i][j].pos.y = get_num(token);
+            token = strtok(NULL, " "); // is opened
+            (user->door)[i][j].is_opened = token[0] - '0';
+            token = strtok(NULL, " "); // is old
+            (user->door)[i][j].is_old = token[0] - '0';
+            token = strtok(NULL, " "); // has password
+            (user->door)[i][j].has_password = token[0] - '0';
+            if ((user->door)[i][j].has_password) { // password
+                token = strtok(NULL, " ");
+                strcpy((user->door)[i][j].password, token);
+            }
+        }
+
 }
 
 int has_map(struct User* user) {
     char *path = get_address(user->username);
     FILE *fptr = fopen(path, "r");
     char line[MAX_SIZE];
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 4; i++)
         if (fgets(line, MAX_SIZE, fptr) == NULL) {
             fclose(fptr);
             return 0;
@@ -171,8 +207,6 @@ void update_user(struct User* user) {
     fprintf(fptr, "%s\n", user->username);
     fprintf(fptr, "%s\n", user->password);
     fprintf(fptr, "%s\n", user->email);
-    fprintf(fptr, "%d\n", user->score);
-    fprintf(fptr, "%d\n", user->gold);
     for (int i = 0; i < GAME_X; i++) {
         for (int j = 0; j < GAME_Y; j++)
             fprintf(fptr, "%c", (user->map)[i][j]);
@@ -184,5 +218,21 @@ void update_user(struct User* user) {
         fprintf(fptr, "\n");
     }
     fprintf(fptr, "%d %d\n", user->pos.x, user->pos.y);
+    fprintf(fptr, "%d\n", user->score);
+    fprintf(fptr, "%d\n", user->gold);
+    fprintf(fptr, "%d\n", user->health);
+    for (int i = 0; i < GAME_X; i++) // traps
+        for (int j = 0; j < GAME_Y; j++) {
+            fprintf(fptr, "%d %d", (user->trap)[i][j].exist, (user->trap)[i][j].damage);
+            fprintf(fptr, "\n");
+        }
+    for (int i = 0; i < GAME_X; i++) // doors
+        for (int j = 0; j < GAME_Y; j++) {
+            struct Door *cur = &((user->door)[i][j]);
+            fprintf(fptr, "%d %d %d %d %d %d", cur->exist, cur->pos.x, cur->pos.y, cur->is_opened, cur->is_old, cur->has_password);
+            if (cur->has_password)
+                fprintf(fptr, " %s", cur->password);
+            fprintf(fptr, "\n");
+        }
     fclose(fptr);
 }

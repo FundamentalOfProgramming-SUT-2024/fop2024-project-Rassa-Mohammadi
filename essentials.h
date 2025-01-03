@@ -13,20 +13,45 @@ struct Point {
     int y;
 };
 
+struct Door {
+    int exist;
+    struct Point pos;
+    int is_opened;
+    int is_old;
+    int has_password;
+    char password[MAX_SIZE];
+};
+
+struct Trap {
+    int exist;
+    int damage;
+};
+
+struct Room {
+    struct Point p;
+    int height, width;
+    char type;
+};
+
 struct User {
     char username[MAX_SIZE];
     char password[MAX_SIZE];
     char email[MAX_SIZE];
-    int score;
-    int gold;
     char **map;
     int mask[MAX_SIZE][MAX_SIZE];
     struct Point pos;
+    int score;
+    int gold;
+    int health;
+    struct Door door[MAX_SIZE][MAX_SIZE];
+    struct Trap trap[MAX_SIZE][MAX_SIZE];
 };
 
-int GAME_X, GAME_Y;
+int GAME_X = 30, GAME_Y = 120;
 int ST_X = 2, ST_Y = 4;
-int D_X[] = {-1, 0, 1, 0}, D_Y[] = {0, 1, 0, -1}; // up, right, down, left
+// up, right, down, left, topleft, topright, bottomright, bottomleft
+int D_X[] = {-1, 0, 1, 0, -1, -1, 1, 1};
+int D_Y[] = {0, 1, 0, -1, -1, 1, 1, -1}; 
 int number_of_rooms;
 struct Point* corners;
 
@@ -46,15 +71,21 @@ void print_message(struct Point st, char s[]) {
     attron(COLOR_PAIR(1));
 }
 
-void init_user(struct User* user, int height, int width) {
-    GAME_X = height;
-    GAME_Y = width;
-    user->map = malloc(sizeof(char *) * GAME_X);
-    for (int i = 0; i < GAME_Y; i++)
-        user->map[i] = malloc(sizeof(char) * GAME_Y);
+void init_user(struct User* user) {
+    user->map = malloc(sizeof(char*) * GAME_X);
+    for (int i = 0; i < GAME_X; i++)
+        (user->map)[i] = malloc(sizeof(char) * GAME_Y);
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++)
             (user->mask)[i][j] = 0;
+    user->score = 0;
+    user->gold = 0;
+    user->health = 10;
+    for (int i = 0; i < GAME_X; i++)
+        for (int j = 0; j < GAME_Y; j++) {
+            (user->door)[i][j].exist = (user->door)[i][j].has_password = 0;
+            (user->trap)[i][j].exist = 0;
+        }
 }
 
 struct Point next_point(struct Point p, int dir) {
@@ -78,6 +109,14 @@ int is_in_map(struct Point p) {
     return p.x >= 0 && p.y >= 0 && p.x < GAME_X && p.y < GAME_Y;
 }
 
+int is_in_room(char ***map, struct Point p) {
+    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O';
+}
+
+int is_in_corridor(char ***map, struct Point p) {
+    return (*map)[p.x][p.y] == '+' || (*map)[p.x][p.y] == '#';
+}
+
 int is_corner(struct Point p) {
     for (int i = 0; i < 4 * number_of_rooms; i++)
         if (p.x == corners[i].x && p.y == corners[i].y)
@@ -86,7 +125,7 @@ int is_corner(struct Point p) {
 }
 
 int not_restricted(char ***map, struct Point p) {
-    return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O';
+    return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O' && (*map)[p.x][p.y] != ' ';
 }
 
 int check_corners(char ***map) {
