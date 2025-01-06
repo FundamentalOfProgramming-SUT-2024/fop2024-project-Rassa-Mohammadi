@@ -202,7 +202,13 @@ void load_user(struct User* user) {
                     strcpy((user->door)[level][i][j].password, token);
                 }
             }
-
+    for (int level = 0; level < 4; level++)
+        for (int i = 0; i < GAME_X; i++) { // theme
+            fgets(line, MAX_SIZE, fptr);
+            for (int j = 0; j < GAME_Y; j++)
+                user->theme[level][i][j] = line[j];
+        }
+    fclose(fptr);
 }
 
 int has_map(struct User* user) {
@@ -257,6 +263,13 @@ void update_user(struct User* user) {
                     fprintf(fptr, " %s", cur->password);
                 fprintf(fptr, "\n");
             }
+    
+    for (int level = 0; level < 4; level++) // theme
+        for (int i = 0; i < GAME_X; i++) {
+            for (int j = 0; j < GAME_Y; j++)
+                fprintf(fptr, "%c", user->theme[level][i][j]);
+            fprintf(fptr, "\n");
+        }
     fclose(fptr);
 }
 

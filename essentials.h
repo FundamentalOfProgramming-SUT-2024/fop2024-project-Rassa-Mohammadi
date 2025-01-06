@@ -17,7 +17,6 @@ struct Point {
 struct Door {
     int exist;
     struct Point pos;
-    int hidden;
     int is_opened;
     int is_old;
     int has_password;
@@ -32,7 +31,7 @@ struct Trap {
 struct Room {
     struct Point p;
     int height, width;
-    char type;
+    char type; // r: regular, e: enchanted, t: treasure, n: nightmare
 };
 
 struct User {
@@ -44,7 +43,7 @@ struct User {
     int level;
     char **map[4];
     int mask[4][MAX_SIZE][MAX_SIZE];
-    char theme[4][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant
+    char theme[4][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare
     struct Point pos;
     int gold;
     int health;
@@ -60,6 +59,7 @@ struct miniUser {
 };
 
 int USERS;
+int DIFFICULTY = 0; // 0: Easy, 1: Medium, 2: HARD
 int GAME_X = 30, GAME_Y = 120;
 int ST_X = 2, ST_Y = 4;
 // up, right, down, left, topleft, topright, bottomright, bottomleft
@@ -91,6 +91,14 @@ void print_number_with_color(int x, int y, int n, int color) {
     attron(COLOR_PAIR(1));
 }
 
+void print_character_with_color(int x, int y, char c, int color) {
+    attroff(COLOR_PAIR(1));
+    attron(COLOR_PAIR(color));
+    mvprintw(x, y, "%c", c);
+    attroff(COLOR_PAIR(color));
+    attron(COLOR_PAIR(1));
+}
+
 void init_user(struct User* user, int level) {
     user->map[level] = malloc(sizeof(char*) * GAME_X);
     for (int i = 0; i < GAME_X; i++)
@@ -104,6 +112,7 @@ void init_user(struct User* user, int level) {
         for (int j = 0; j < GAME_Y; j++) {
             (user->door)[level][i][j].exist = (user->door)[level][i][j].has_password = 0;
             (user->trap)[level][i][j].exist = 0;
+            (user->theme)[level][i][j] = '.';
         }
 }
 
@@ -161,7 +170,9 @@ int is_corner(struct Point p) {
     return 0;
 }
 
-int not_restricted(char ***map, struct Point p) {
+int not_restricted(struct User* user, char ***map, struct Point p) {
+    if (user->door[user->level][p.x][p.y].exist)
+        return 1;
     return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O' && (*map)[p.x][p.y] != ' ';
 }
 

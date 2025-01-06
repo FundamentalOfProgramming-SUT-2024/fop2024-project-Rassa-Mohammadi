@@ -18,6 +18,9 @@ void music_menu();
 void play_game();
 void move_player(int, char***);
 void play_trap(struct Point);
+void appear_map(struct Point, int);
+void appear_nightmare(struct Point, int);
+void disappear_nightmare(struct Point, int);
 int check_health();
 void quit_game();
 
@@ -43,6 +46,8 @@ void set_colors() {
     init_pair(3, COLOR_GREEN, COLOR_BLACK);
     init_pair(4, COLOR_CYAN, COLOR_BLACK);
     init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(6, COLOR_WHITE, COLOR_BLACK);
+    init_pair(7, COLOR_YELLOW, COLOR_BLACK);
     attron(COLOR_PAIR(1));
 }
 
@@ -288,8 +293,9 @@ void create_register_page() {
 }
 
 void difficulty_menu() {
-    char *options[] = {"Easy", "Medium", "Hard"};
+    char *options[] = {"Easy (default)", "Medium", "Hard"};
     int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3);
+    DIFFICULTY = choice;
     go_to_settings();
 }
 
@@ -336,6 +342,7 @@ void scoreboard_menu() {
         return;
     }
     sort_miniusers(user_list);
+    print_message_with_color(LINES - 1, 0, "Press (Q) to return ...", 2);
     // Titles
     // Rank, Username, Golds, Games, Time
     print_message_with_color(ST_X, ST_Y, "Rank", 4);
@@ -348,7 +355,7 @@ void scoreboard_menu() {
     for (int i = 0; i < USERS; i++)
         if (!strcmp(user_list[i]->username, user.username))
             user_pos = i;
-    int cur = 0, key = -1, sz = 4, st = 0;
+    int cur = 0, key = -1, sz = (USERS >= 4? 4: USERS), st = 0;
     timeout(0);
     do {
         if (key == KEY_UP) {
@@ -401,32 +408,32 @@ void move_player(int key, char ***map) {
     struct Point nxt;
     if (key == KEY_UP) {
         nxt = next_point(user.pos, 0);
-        if (is_in_map(nxt) && not_restricted(map, nxt))
+        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
             user.pos.x = nxt.x, user.pos.y = nxt.y;
     }
     else if (key == KEY_RIGHT) {
         nxt = next_point(user.pos, 1);
-        if (is_in_map(nxt) && not_restricted(map, nxt))
+        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
             user.pos.x = nxt.x, user.pos.y = nxt.y;
     }
     else if (key == KEY_DOWN) {
         nxt = next_point(user.pos, 2);
-        if (is_in_map(nxt) && not_restricted(map, nxt))
+        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
             user.pos.x = nxt.x, user.pos.y = nxt.y;
     }
     else if (key == KEY_LEFT) {
         nxt = next_point(user.pos, 3);
-        if (is_in_map(nxt) && not_restricted(map, nxt))
+        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
             user.pos.x = nxt.x, user.pos.y = nxt.y;
     }
 }
 
 void appear_map(struct Point p, int depth) {
+    int level = user.level;
+    (user.mask)[level][p.x][p.y] = 1;
     if (!depth)
         return;
-    int level = user.level;
     if (is_in_room(&(user.map[level]), p)) {
-        (user.mask)[level][p.x][p.y] = 1;
         for (int dir = 0; dir < 8; dir++) {
             struct Point nxt = next_point(p, dir);
             if (is_in_room(&(user.map[level]), nxt) && !(user.mask)[level][nxt.x][nxt.y])
@@ -436,7 +443,6 @@ void appear_map(struct Point p, int depth) {
         }
     }
     else { // +, #
-        (user.mask)[level][p.x][p.y] = 1;
         for (int dir = 0; dir < 4; dir++) {
             struct Point nxt = next_point(p, dir);
             if (is_in_map(nxt)) {
@@ -446,6 +452,28 @@ void appear_map(struct Point p, int depth) {
                     appear_map(nxt, 5);
             }
         }
+    }
+}
+
+void appear_nightmare(struct Point p, int depth) {
+    user.mask[user.level][p.x][p.y] = 1;
+    if (!depth)
+        return;
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (is_in_map(nxt) && user.theme[user.level][nxt.x][nxt.y] == 'n')
+            appear_nightmare(nxt, depth - 1);
+    }
+}
+
+void disappear_nightmare(struct Point p, int depth) {
+    user.mask[user.level][p.x][p.y] = 0;
+    if (!depth)
+        return;
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (is_in_map(nxt) && user.theme[user.level][nxt.x][nxt.y] == 'n')
+            disappear_nightmare(nxt, depth - 1);
     }
 }
 
@@ -468,16 +496,46 @@ int check_health() {
         print_message_with_color(LINES / 3, COLS / 3, "There is no health left for you!", 2);
         refresh();
         usleep(500000);
+        update_user(&user);
         quit_game();
         return 0;
     }
     return 1;
 }
 
+void reached_treasure_room() {
+    clear();
+    print_message_with_color(LINES / 3, COLS / 3, "You have found the treasure room. Nice job!", 7);
+    refresh();
+    usleep(500000);
+    update_user(&user);
+    quit_game();
+}
+
 void play_game() {
     clear();
     int key;
+    time_t st;
+    int is_in_enchant = 0;
     do {
+        timeout(0);
+        time_t now;
+        time(&now);
+        if (user.theme[user.level][user.pos.x][user.pos.y] == 't')
+            reached_treasure_room();
+        // reduce health --> enchanted room
+        if (user.theme[user.level][user.pos.x][user.pos.y] == 'e') {
+            if (!is_in_enchant) {
+                is_in_enchant = 1;
+                st = now;
+            }
+            else if (difftime(now, st) > (2 - DIFFICULTY) + 5) {
+                st = now;
+                --user.health;
+            }
+        }
+        else
+            is_in_enchant = 0;
         check_health();
         // change level
         if (user.map[user.level][user.pos.x][user.pos.y] == '<') {
@@ -497,16 +555,20 @@ void play_game() {
             user.map[user.level][user.pos.x][user.pos.y] = '.';
         }
         check_health();
-        appear_map(user.pos, 5);
+        if (user.theme[user.level][user.pos.x][user.pos.y] == 'n')
+            appear_nightmare(user.pos, 2);
+        else
+            appear_map(user.pos, 5);
         print_map(&user, reveal);
         print_message_with_color(user.pos.x + ST_X, user.pos.y + ST_Y, "$", hero_color);
         print_status(&user);
         refresh();
+        if (user.theme[user.level][user.pos.x][user.pos.y] == 'n')
+            disappear_nightmare(user.pos, 2);
         key = getch();
         move_player(key, &(user.map[user.level]));
         if (key == 'M')
             reveal = 1 - reveal;
-        timeout(0);
     } while (key != 'Q');
     timeout(-1);
     update_user(&user);
