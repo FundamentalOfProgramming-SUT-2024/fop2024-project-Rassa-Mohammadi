@@ -37,10 +37,10 @@ void clean_area(struct Point top_left, struct Point bottom_right) {
             mvprintw(i, j, " ");
 }
 
-int create_list(struct Point st, char *options[], int cnt) {
-    clear();
+int create_list(struct Point st, char *options[], int cnt, int color) {
     curs_set(FALSE);
     noecho();
+    change_color(color);
     int choice = 0, key = -1;
     do {
         if (key == KEY_UP && choice > 0)
@@ -58,6 +58,7 @@ int create_list(struct Point st, char *options[], int cnt) {
         }
         key = getch();
     } while (key != '\n');
+    undo_color(color);
     return choice;
 }
 
@@ -100,7 +101,7 @@ int create_room(struct User* user, char ***map, struct Point p, int height, int 
     (*rooms)[index].height = height;
     (*rooms)[index].width = width;
     // determine room type
-    if ((rand() % 10) < 6)
+    if ((rand() % 10) < 7)
         (*rooms)[index].type = 'r';
     else if (rand() % 2) // enchanted room
         (*rooms)[index].type = 'e';
@@ -217,8 +218,15 @@ void generate_staircase(char ***map, struct Point* p) {
     p->x = tmp.x, p->y = tmp.y;
 }
 
+// int get_gold(char c) {
+//     if (c == 'g')
+//         return 1;
+//     else if (c == 'G')
+//         return 1 + rand() % (3 - DIFFICULTY);
+// }
+
 void generate_gold(char ***map, struct Room* room) {
-    if (room->type == 'r') {
+    if (room->type == 'r' || room->type == 'n') {
         int has_gold = rand() % (2 + DIFFICULTY);
         while (!has_gold) {
             int x = room->p.x + 1 + rand() % room->height;
@@ -276,10 +284,25 @@ void create_secret_doors(struct User* user, char ***map, struct Room* room, int 
     }
 }
 
+void generate_food(char ***map, struct Room* room) {
+    if (room->type != 't' && room->type != 'e') {
+        int number_of_food = 1 + rand() % (3 - DIFFICULTY);
+        while (number_of_food) {
+            int x = room->p.x + 1 + rand() % room->height;
+            int y = room->p.y + 1 + rand() % room->width;
+            if ((*map)[x][y] == '.') {
+                (*map)[x][y] = 'f';
+                --number_of_food;
+            }
+        }
+    }
+}
+
 void add_items(struct User* user, char ***map, struct Room* room, int level) { // add items to room
     generate_pillar(map, room);
     generate_traps(user, room, level);
     generate_gold(map, room);
+    generate_food(map, room);
     create_secret_doors(user, map, room, level);
 }
 
@@ -303,6 +326,7 @@ void generate_map(struct User* user) {
                 clear();
                 print_message_with_color(LINES / 3, COLS / 3, "Failed to generate map!", 2);
                 print_message_with_color(LINES / 3 + 2, COLS / 3, "Press any key to regenerate ...", 3);
+                refresh();
                 getch();
                 clear();
                 generate_map(user);
@@ -346,8 +370,6 @@ void generate_map(struct User* user) {
 }
 
 void print_map(struct User* user, int reveal) {
-    print_message_with_color(0, 0, "Floor level is ", 2);
-    print_number_with_color(0, 15, user->level + 1, 2);
     print_message_with_color(LINES - 1, 0, "Press (Q) to exit game.", 2);
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++) {
@@ -370,20 +392,35 @@ void print_map(struct User* user, int reveal) {
                 color = 1;
                 break;
             }
-            if ((user->mask)[user->level][i][j] || reveal)
+            if ((user->mask)[user->level][i][j] || reveal) {
                 print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], color);
+            }
             else
                 mvprintw(i + ST_X, j + ST_Y, " ");
         }
+}
+
+void print_hunger(int x, int y, struct User* user) {
+    print_message_with_color(x, y, "Your Hunger:[", 2);
+    attroff(COLOR_PAIR(1));
+    attron(COLOR_PAIR(2));
+    for (int i = 0; i < user->hunger; i++)
+        mvprintw(x, y + 13 + i, "#");
+    for (int i = user->hunger; i < 10; i++)
+        mvprintw(x, y + 13 + i, ".");
+    mvprintw(x, y + 13 + 10, "] (%d out of 10)", user->hunger);
+    attroff(COLOR_PAIR(2));
+    attron(COLOR_PAIR(1));
 }
 
 void print_status(struct User* user) {
     move(GAME_X + ST_X, GAME_Y / 3);
     attroff(COLOR_PAIR(1));
     attron(COLOR_PAIR(4));
-    printw("Gold: %d \t Health: %d \t Games: %d", user->gold, user->health, user->number_of_games);
+    printw("Score: %d \t Gold: %d \t Health: %d \t Games: %d", user->score, user->gold, user->health, user->number_of_games);
     attroff(COLOR_PAIR(4));
     attron(COLOR_PAIR(1));
+    print_hunger(GAME_X + ST_X + 1, GAME_Y / 3 + 1, user);
 }
 
 void print_user_list(struct miniUser** user_list, int st, int sz, int cur, int user_pos) {
@@ -418,9 +455,10 @@ void print_user_list(struct miniUser** user_list, int st, int sz, int cur, int u
         }
         print_number_with_color(ST_X + 2 * i + 2, ST_Y, i + st + 1, color);
         print_message_with_color(ST_X + 2 * i + 2, ST_Y + 10, name, color);
-        print_number_with_color(ST_X + 2 * i + 2, ST_Y + 30, user_list[i + st]->gold, color);
-        print_number_with_color(ST_X + 2 * i + 2, ST_Y + 40, user_list[i + st]->number_of_games, color);
-        print_message_with_color(ST_X + 2 * i + 2, ST_Y + 50, get_time(user_list[i + st]->first_game), color);
+        print_number_with_color(ST_X + 2 * i + 2, ST_Y + 30, user_list[i + st]->score, color);
+        print_number_with_color(ST_X + 2 * i + 2, ST_Y + 40, user_list[i + st]->gold, color);
+        print_number_with_color(ST_X + 2 * i + 2, ST_Y + 50, user_list[i + st]->number_of_games, color);
+        print_message_with_color(ST_X + 2 * i + 2, ST_Y + 60, get_time(user_list[i + st]->first_game), color);
         if (i + st < 3)
             attroff(A_ITALIC);
         if (i == cur)

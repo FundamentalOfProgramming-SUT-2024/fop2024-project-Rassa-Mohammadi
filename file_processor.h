@@ -1,3 +1,5 @@
+SDL_AudioDeviceID id;
+
 char* get_address(char username[MAX_SIZE], char extension[], char directory[]) {
     char *res = malloc(MAX_SIZE * sizeof(char));
     strcpy(res, directory);
@@ -108,7 +110,7 @@ int valid_email(char email[]) {
 void create_user(struct User *user) {
     user->number_of_games = 0;
     time(&user->first_game);
-    user->level = user->gold = 0;
+    user->level = user->gold = user->score = 0;
     char *path = get_address(user->username, ".txt", "users/");
     FILE *fptr = fopen(path, "w");
     fprintf(fptr, "%s\n", user->username);
@@ -152,12 +154,25 @@ void load_user(struct User* user) {
     user->pos.x = get_num(token);
     token = strtok(NULL, " ");
     user->pos.y = get_num(token);
+    fgets(line, MAX_SIZE, fptr); // number of food in bag
+    trim(line);
+    user->bag.number_of_food = get_num(line);
+    fgets(line, MAX_SIZE, fptr);
+    trim(line);
+    for (int i = 0; i < strlen(line); i++) // food type
+        user->bag.food[i] = line[i];
+    fgets(line, MAX_SIZE, fptr); // score
+    trim(line);
+    user->score = get_num(line);
     fgets(line, MAX_SIZE, fptr); // gold
     trim(line);
     user->gold = get_num(line);
     fgets(line, MAX_SIZE, fptr); // health
     trim(line);
     user->health = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // hunger
+    trim(line);
+    user->hunger = get_num(line);
     for (int level = 0; level < 4; level++)
         for (int i = 0; i < GAME_X; i++) { // map
             fgets(line, MAX_SIZE, fptr);
@@ -234,8 +249,14 @@ void update_user(struct User* user) {
     fprintf(fptr, "%ld\n", user->first_game);
     fprintf(fptr, "%d\n", user->level);
     fprintf(fptr, "%d %d\n", user->pos.x, user->pos.y);
+    fprintf(fptr, "%d\n", user->bag.number_of_food);
+    for (int i = 0; i < user->bag.number_of_food; i++)
+        fprintf(fptr, "%c", user->bag.food[i]);
+    fprintf(fptr, "\n");
+    fprintf(fptr, "%d\n", user->score);
     fprintf(fptr, "%d\n", user->gold);
     fprintf(fptr, "%d\n", user->health);
+    fprintf(fptr, "%d\n", user->hunger);
     for (int level = 0; level < 4; level++)
         for (int i = 0; i < GAME_X; i++) {
             for (int j = 0; j < GAME_Y; j++)
@@ -290,6 +311,11 @@ void load_miniuser(char username[MAX_SIZE], struct miniUser* miniuser) {
     miniuser->first_game = get_num(line);
     fgets(line, MAX_SIZE, fptr); // level
     fgets(line, MAX_SIZE, fptr); // user pos
+    fgets(line, MAX_SIZE, fptr); // bag.number of food
+    fgets(line, MAX_SIZE, fptr); // food type
+    fgets(line, MAX_SIZE, fptr); // score
+    trim(line);
+    miniuser->score = get_num(line);
     fgets(line, MAX_SIZE, fptr); // gold
     trim(line);
     miniuser->gold = get_num(line);
@@ -324,7 +350,11 @@ void play_song(char song[MAX_SIZE]) {
     Uint32 wav_length;
     SDL_LoadWAV(path, &wav_spec, &wav_start, &wav_length);
 
-    SDL_AudioDeviceID id = SDL_OpenAudioDevice(NULL, 0, &wav_spec, NULL, 0); // play
+    id = SDL_OpenAudioDevice(NULL, 0, &wav_spec, NULL, 0); // play
     SDL_QueueAudio(id, wav_start, wav_length);
     SDL_PauseAudioDevice(id, 0);
+}
+
+void terminate_music() {
+    SDL_PauseAudioDevice(id, 1);
 }

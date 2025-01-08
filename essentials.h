@@ -34,6 +34,11 @@ struct Room {
     char type; // r: regular, e: enchanted, t: treasure, n: nightmare
 };
 
+struct Bag {
+    int number_of_food;
+    char food[5];
+};
+
 struct User {
     char username[MAX_SIZE];
     char password[MAX_SIZE];
@@ -45,8 +50,11 @@ struct User {
     int mask[4][MAX_SIZE][MAX_SIZE];
     char theme[4][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare
     struct Point pos;
+    struct Bag bag;
+    int score;
     int gold;
     int health;
+    int hunger;
     struct Door door[4][MAX_SIZE][MAX_SIZE];
     struct Trap trap[4][MAX_SIZE][MAX_SIZE];
 };
@@ -56,12 +64,14 @@ struct miniUser {
     int number_of_games;
     time_t first_game;
     int gold;
+    int score;
 };
 
+time_t LAST_REFRESH[3], LAST_EAT;
 int USERS;
 int DIFFICULTY = 0; // 0: Easy, 1: Medium, 2: HARD
 int GAME_X = 30, GAME_Y = 120;
-int ST_X = 2, ST_Y = 4;
+int ST_X = 3, ST_Y = 4;
 // up, right, down, left, topleft, topright, bottomright, bottomleft
 int D_X[] = {-1, 0, 1, 0, -1, -1, 1, 1};
 int D_Y[] = {0, 1, 0, -1, -1, 1, 1, -1}; 
@@ -73,6 +83,16 @@ struct Point create_point(int x, int y) {
     p.x = x;
     p.y = y;
     return p;
+}
+
+void change_color(int color) {
+    attroff(COLOR_PAIR(1));
+    attron(COLOR_PAIR(color));
+}
+
+void undo_color(int color) {
+    attroff(COLOR_PAIR(color));
+    attron(COLOR_PAIR(1));
 }
 
 void print_message_with_color(int x, int y, char message[], int color) {
@@ -107,7 +127,9 @@ void init_user(struct User* user, int level) {
         for (int j = 0; j < GAME_Y; j++)
             (user->mask)[level][i][j] = 0;
     // user->gold = 0;
+    user->bag.number_of_food = 0;
     user->health = 10;
+    user->hunger = 10;
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++) {
             (user->door)[level][i][j].exist = (user->door)[level][i][j].has_password = 0;
@@ -156,7 +178,16 @@ int is_in_map(struct Point p) {
 }
 
 int is_in_room(char ***map, struct Point p) {
-    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g';
+    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f';
+}
+
+int is_new_room(struct User* user) {
+    for (int dir = 0; dir < 4; dir++) {
+        struct Point nxt = next_point(user->pos, dir);
+        if (is_in_map(nxt)  && is_in_room(&(user->map[user->level]), nxt))
+            return !user->mask[user->level][nxt.x][nxt.y];
+    }
+    return 0;
 }
 
 int is_in_corridor(char ***map, struct Point p) {
@@ -168,6 +199,10 @@ int is_corner(struct Point p) {
         if (p.x == corners[i].x && p.y == corners[i].y)
             return 1;
     return 0;
+}
+
+int is_food(struct User* user) {
+    return user->map[user->level][user->pos.x][user->pos.y] == 'f';
 }
 
 int not_restricted(struct User* user, char ***map, struct Point p) {
@@ -240,4 +275,32 @@ char* get_time(time_t t) {
     strcat(res, get_str(s));
     strcat(res, " Seconds.");
     return res;
+}
+
+void init_time(time_t t) {
+    for (int line = 0; line < 3; line++)
+        LAST_REFRESH[line] = t;
+    LAST_EAT = t;
+}
+
+int refresh_message(time_t t, int line) {
+    if (difftime(t, LAST_REFRESH[line]) > 2) {
+        LAST_REFRESH[line] = t;
+        return 1;
+    }
+    return 0;
+}
+
+void reduce_hunger(struct User* user) {
+    if (user->hunger > 0)
+        --user->hunger;
+    else
+        --user->health;
+}
+
+void check_food(struct User* user, time_t t) {
+    if (difftime(t, LAST_EAT) > 5 + (2 - DIFFICULTY)) {
+        reduce_hunger(user);
+        LAST_EAT = t;
+    }
 }

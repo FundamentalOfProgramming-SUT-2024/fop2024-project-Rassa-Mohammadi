@@ -21,6 +21,8 @@ void play_trap(struct Point);
 void appear_map(struct Point, int);
 void appear_nightmare(struct Point, int);
 void disappear_nightmare(struct Point, int);
+void hunger_menu();
+void consume_food(int);
 int check_health();
 void quit_game();
 
@@ -48,6 +50,9 @@ void set_colors() {
     init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
     init_pair(6, COLOR_WHITE, COLOR_BLACK);
     init_pair(7, COLOR_YELLOW, COLOR_BLACK);
+    int gold_color = 8;
+    init_color(gold_color, 1000, 840, 0);
+    init_pair(8, gold_color, COLOR_BLACK);
     attron(COLOR_PAIR(1));
 }
 
@@ -293,24 +298,27 @@ void create_register_page() {
 }
 
 void difficulty_menu() {
+    clear();
     char *options[] = {"Easy (default)", "Medium", "Hard"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3);
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3, 1);
     DIFFICULTY = choice;
     go_to_settings();
 }
 
 void hero_color_menu() {
+    clear();
     char *options[] = {"Blue (default)", "Red", "Green"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3);
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3, 1);
     hero_color = choice + 1;
     go_to_settings();
 }
 
 void music_menu() {
+    clear();
     char *options[] = {"No Music (default)", "ann", "Angry_Birds"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3);
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3, 1);
     if (choice == 0)
-        SDL_Quit();
+        terminate_music();
     else
         play_song(options[choice]);
     go_to_settings();
@@ -319,7 +327,7 @@ void music_menu() {
 void go_to_settings() {
     clear();
     char *options[] = {"Set Difficulty", "Hero Color", "Music", "Back"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 4);
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 4, 1);
     if (choice == 0)
         difficulty_menu();
     else if (choice == 1)
@@ -347,9 +355,10 @@ void scoreboard_menu() {
     // Rank, Username, Golds, Games, Time
     print_message_with_color(ST_X, ST_Y, "Rank", 4);
     print_message_with_color(ST_X, ST_Y + 10, "Username", 4);
-    print_message_with_color(ST_X, ST_Y + 30, "Golds", 4);
-    print_message_with_color(ST_X, ST_Y + 40, "Games", 4);
-    print_message_with_color(ST_X, ST_Y + 50, "Time", 4);
+    print_message_with_color(ST_X, ST_Y + 30, "Score", 4);
+    print_message_with_color(ST_X, ST_Y + 40, "Golds", 4);
+    print_message_with_color(ST_X, ST_Y + 50, "Games", 4);
+    print_message_with_color(ST_X, ST_Y + 60, "Time", 4);
     // Users
     int user_pos;
     for (int i = 0; i < USERS; i++)
@@ -382,7 +391,7 @@ void pregame_menu() {
     curs_set(FALSE);
     noecho();
     char *options[] = {"Load previous game", "Create new game", "Scoreboard", "Settings"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 4);
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 4, 1);
     if (choice == 0) { // load game
         if (is_guest || !has_map(&user) || !check_health()) {
             clear();
@@ -401,6 +410,48 @@ void pregame_menu() {
     }
     else { // settings
         go_to_settings();
+    }
+}
+
+void hunger_menu() {
+    clear();
+    timeout(-1);
+    curs_set(FALSE);
+    int x = LINES / 3 - 2, y = COLS / 3;
+    print_hunger(x, y, &user);
+    print_message_with_color(x + 1, y - 15, "The following foods are available in your bag. choose one to recover hunger:", 2);
+    refresh();
+    char *options[user.bag.number_of_food];
+    for (int i = 0; i < user.bag.number_of_food; i++) {
+        if (user.bag.food[i] == 'f') {
+            options[i] = malloc(sizeof(char) * 12);
+            strcpy(options[i], "Normal food");
+        }
+        // else
+    }
+    int choice = create_list(create_point(x + 3, y), options, user.bag.number_of_food, 3);
+    switch (user.bag.food[choice]) {
+        case 'f':
+            consume_food(3);
+            break;
+        default:
+            break;
+    }
+    --user.bag.number_of_food;
+    for (int i = choice; i < user.bag.number_of_food; i++)
+        user.bag.food[i] = user.bag.food[i + 1];
+    timeout(0);
+}
+
+void consume_food(int x) {
+    if (10 - user.hunger >= x)
+        user.hunger += x;
+    else {
+        x -= 10 - user.hunger;
+        user.hunger = 10;
+        user.health += x;
+        if (user.health > 10)
+            user.health = 10;
     }
 }
 
@@ -507,7 +558,7 @@ void reached_treasure_room() {
     clear();
     print_message_with_color(LINES / 3, COLS / 3, "You have found the treasure room. Nice job!", 7);
     refresh();
-    usleep(500000);
+    usleep(1500000);
     update_user(&user);
     quit_game();
 }
@@ -515,28 +566,73 @@ void reached_treasure_room() {
 void play_game() {
     clear();
     int key;
-    time_t st;
-    int is_in_enchant = 0;
+    time_t now, st_enchant;
+    int is_in_enchant = 0, in_room = 1;
+    time(&now);
+    init_time(now);
     do {
-        timeout(0);
-        time_t now;
         time(&now);
-        if (user.theme[user.level][user.pos.x][user.pos.y] == 't')
-            reached_treasure_room();
+        for (int line = 0; line < 3; line++)
+            if (refresh_message(now, line))
+                clean_area(create_point(line, 0), create_point(line, COLS - 1));
+        check_food(&user, now);
+        timeout(0);
         // reduce health --> enchanted room
         if (user.theme[user.level][user.pos.x][user.pos.y] == 'e') {
             if (!is_in_enchant) {
                 is_in_enchant = 1;
-                st = now;
+                st_enchant = now;
             }
-            else if (difftime(now, st) > (2 - DIFFICULTY) + 5) {
-                st = now;
+            else if (difftime(now, st_enchant) > (2 - DIFFICULTY) + 5) {
+                st_enchant = now;
                 --user.health;
             }
         }
         else
             is_in_enchant = 0;
         check_health();
+        if (user.theme[user.level][user.pos.x][user.pos.y] == 't')
+            reached_treasure_room();
+        // trap
+        if (user.trap[user.level][user.pos.x][user.pos.y].exist)
+            play_trap(create_point(user.pos.x, user.pos.y));
+        check_health();
+        // gold
+        if (user.map[user.level][user.pos.x][user.pos.y] == 'g') {
+            // int cnt = get_gold(user.map[user.level][user.pos.x][user.pos.y]);
+            if (user.theme[user.level][user.pos.x][user.pos.y] != 'n') {
+                user.gold++;
+                user.score++;
+                print_message_with_color(2, 0, "You gained ", 8);
+                print_number_with_color(2, 11, 1, 8);
+                print_message_with_color(2, 13, "golds!", 8);
+                LAST_REFRESH[2] = now;
+            }
+            user.map[user.level][user.pos.x][user.pos.y] = '.';
+        }
+        // food
+        if (is_food(&user)) {
+            if (user.bag.number_of_food == 5) {
+                print_message_with_color(1, 0, "Bag is full! Can not pick food!", 2);
+                LAST_REFRESH[1] = now;
+            }
+            else {
+                if (user.theme[user.level][user.pos.x][user.pos.y] != 'n') {
+                    print_message_with_color(1, 0, "Food has been added to your bag!", 3);
+                    LAST_REFRESH[1] = now;
+                    user.bag.food[user.bag.number_of_food] = user.map[user.level][user.pos.x][user.pos.y];
+                    ++user.bag.number_of_food;
+                }
+                user.map[user.level][user.pos.x][user.pos.y] = '.';
+            }
+        }
+        // enter new room
+        if (user.map[user.level][user.pos.x][user.pos.y] == '+' || user.map[user.level][user.pos.x][user.pos.y] == '_' || user.map[user.level][user.pos.x][user.pos.y] == '|') {
+            if (is_new_room(&user)) {
+                print_message_with_color(0, 0, "You have entered a new room", 2);
+                LAST_REFRESH[0] = now;
+            }
+        }
         // change level
         if (user.map[user.level][user.pos.x][user.pos.y] == '<') {
             --user.level;
@@ -544,17 +640,13 @@ void play_game() {
         }
         else if (user.map[user.level][user.pos.x][user.pos.y] == '>') {
             ++user.level;
+            if (!user.mask[user.level][user.pos.x][user.pos.y]) {
+                print_message_with_color(0, 0, "You have entered a new floor. Floor level is ", 2);
+                print_number_with_color(0, 45, user.level, 2);
+                LAST_REFRESH[0] = now;
+            }
             timeout(-1);
         }
-        // trap
-        if (user.trap[user.level][user.pos.x][user.pos.y].exist)
-            play_trap(create_point(user.pos.x, user.pos.y));
-        // gold
-        if (user.map[user.level][user.pos.x][user.pos.y] == 'g') {
-            user.gold++;
-            user.map[user.level][user.pos.x][user.pos.y] = '.';
-        }
-        check_health();
         if (user.theme[user.level][user.pos.x][user.pos.y] == 'n')
             appear_nightmare(user.pos, 2);
         else
@@ -569,6 +661,8 @@ void play_game() {
         move_player(key, &(user.map[user.level]));
         if (key == 'M')
             reveal = 1 - reveal;
+        if (key == 'E')
+            hunger_menu();
     } while (key != 'Q');
     timeout(-1);
     update_user(&user);
