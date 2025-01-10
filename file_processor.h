@@ -110,7 +110,7 @@ int valid_email(char email[]) {
 void create_user(struct User *user) {
     user->number_of_games = 0;
     time(&user->first_game);
-    user->level = user->gold = user->score = 0;
+    user->level = user->golds = user->score = 0;
     char *path = get_address(user->username, ".txt", "users/");
     FILE *fptr = fopen(path, "w");
     fprintf(fptr, "%s\n", user->username);
@@ -118,7 +118,8 @@ void create_user(struct User *user) {
     fprintf(fptr, "%s\n", user->email);
     fprintf(fptr, "%d\n", user->number_of_games);
     fprintf(fptr, "%ld\n", user->first_game);
-    fprintf(fptr, "%d\n", user->level);
+    fprintf(fptr, "%d\n", user->score);
+    fprintf(fptr, "%d\n", user->golds);
     fclose(fptr);
     // add to users.txt
     fptr = fopen("users/users.txt", "a");
@@ -127,8 +128,6 @@ void create_user(struct User *user) {
 }
 
 void load_user(struct User* user) {
-    for (int level = 0; level < 4; level++)
-        init_user(user, level);
     char *path = get_address(user->username, ".txt", "users/");
     FILE *fptr = fopen(path, "r");
     char line[MAX_SIZE];
@@ -145,6 +144,17 @@ void load_user(struct User* user) {
     fgets(line, MAX_SIZE, fptr); // first game date
     trim(line);
     user->first_game = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // score
+    trim(line);
+    user->score = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // gold
+    trim(line);
+    user->golds = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // number of floor ---> 4 or 5
+    trim(line);
+    user->number_of_floor = get_num(line);
+    for (int level = 0; level < user->number_of_floor; level++)
+        init_user(user, level);
     fgets(line, MAX_SIZE, fptr); // level
     trim(line);
     user->level = line[0] - '0';
@@ -161,31 +171,51 @@ void load_user(struct User* user) {
     trim(line);
     for (int i = 0; i < strlen(line); i++) // food type
         user->bag.food[i] = line[i];
-    fgets(line, MAX_SIZE, fptr); // score
+    fgets(line, MAX_SIZE, fptr); // number of weapon in bag
     trim(line);
-    user->score = get_num(line);
-    fgets(line, MAX_SIZE, fptr); // gold
+    user->bag.number_of_weapon = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // weapon type
     trim(line);
-    user->gold = get_num(line);
+    for (int i = 0; i < strlen(line); i++)
+        user->bag.weapon[i] = line[i];
+    fgets(line, MAX_SIZE, fptr); // health potion
+    trim(line);
+    user->bag.health_potion = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // speed potion
+    trim(line);
+    user->bag.speed_potion = get_num(line);
+    fgets(line, MAX_SIZE, fptr); // damage potion
+    trim(line);
+    user->bag.damage_potion = get_num(line);
     fgets(line, MAX_SIZE, fptr); // health
     trim(line);
     user->health = get_num(line);
     fgets(line, MAX_SIZE, fptr); // hunger
     trim(line);
     user->hunger = get_num(line);
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) { // map
             fgets(line, MAX_SIZE, fptr);
             for (int j = 0; j < GAME_Y; j++)
                 (user->map)[level][i][j] = line[j];
         }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) { // mask
             fgets(line, MAX_SIZE, fptr);
             for (int j = 0; j < GAME_Y; j++)
                 (user->mask)[level][i][j] = line[j] - '0';
         }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
+        for (int i = 0; i < GAME_X; i++)
+            for (int j = 0; j < GAME_Y; j++) { // gold
+                fgets(line, MAX_SIZE, fptr);
+                trim(line);
+                char *token = strtok(line, " ");
+                (user->gold)[level][i][j].type = token[0];
+                token = strtok(NULL, " ");
+                (user->gold)[level][i][j].cnt = get_num(token);
+            }
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) // traps
             for (int j = 0; j < GAME_Y; j++) {
                 fgets(line, MAX_SIZE, fptr);
@@ -195,7 +225,7 @@ void load_user(struct User* user) {
                 token = strtok(NULL, " ");
                 (user->trap)[level][i][j].damage = get_num(token);
             }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) // doors
             for (int j = 0; j < GAME_Y; j++) {
                 fgets(line, MAX_SIZE, fptr);
@@ -217,7 +247,7 @@ void load_user(struct User* user) {
                     strcpy((user->door)[level][i][j].password, token);
                 }
             }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) { // theme
             fgets(line, MAX_SIZE, fptr);
             for (int j = 0; j < GAME_Y; j++)
@@ -230,7 +260,7 @@ int has_map(struct User* user) {
     char *path = get_address(user->username, ".txt", "users/");
     FILE *fptr = fopen(path, "r");
     char line[MAX_SIZE];
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 20; i++)
         if (fgets(line, MAX_SIZE, fptr) == NULL) {
             fclose(fptr);
             return 0;
@@ -247,35 +277,48 @@ void update_user(struct User* user) {
     fprintf(fptr, "%s\n", user->email);
     fprintf(fptr, "%d\n", user->number_of_games);
     fprintf(fptr, "%ld\n", user->first_game);
+    fprintf(fptr, "%d\n", user->score);
+    fprintf(fptr, "%d\n", user->golds);
+    fprintf(fptr, "%d\n", user->number_of_floor);
     fprintf(fptr, "%d\n", user->level);
     fprintf(fptr, "%d %d\n", user->pos.x, user->pos.y);
     fprintf(fptr, "%d\n", user->bag.number_of_food);
     for (int i = 0; i < user->bag.number_of_food; i++)
         fprintf(fptr, "%c", user->bag.food[i]);
     fprintf(fptr, "\n");
-    fprintf(fptr, "%d\n", user->score);
-    fprintf(fptr, "%d\n", user->gold);
+    fprintf(fptr, "%d\n", user->bag.number_of_weapon);
+    for (int i = 0; i < user->bag.number_of_weapon; i++)
+        fprintf(fptr, "%c", user->bag.weapon[i]);
+    fprintf(fptr, "\n");
+    fprintf(fptr, "%d\n", user->bag.health_potion);
+    fprintf(fptr, "%d\n", user->bag.speed_potion);
+    fprintf(fptr, "%d\n", user->bag.damage_potion);
     fprintf(fptr, "%d\n", user->health);
     fprintf(fptr, "%d\n", user->hunger);
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) {
             for (int j = 0; j < GAME_Y; j++)
                 fprintf(fptr, "%c", (user->map)[level][i][j]);
             fprintf(fptr, "\n");
         }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) {
             for (int j = 0; j < GAME_Y; j++)
                 fprintf(fptr, "%d", (user->mask)[level][i][j]);
             fprintf(fptr, "\n");
         }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++) // gold
+        for (int i = 0; i < GAME_X; i++)
+            for (int j = 0; j < GAME_Y; j++) {
+                fprintf(fptr, "%c %d\n", (user->gold)[level][i][j].type, (user->gold)[level][i][j].cnt);
+            }
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) // traps
             for (int j = 0; j < GAME_Y; j++) {
                 fprintf(fptr, "%d %d", (user->trap)[level][i][j].exist, (user->trap)[level][i][j].damage);
                 fprintf(fptr, "\n");
             }
-    for (int level = 0; level < 4; level++)
+    for (int level = 0; level < user->number_of_floor; level++)
         for (int i = 0; i < GAME_X; i++) // doors
             for (int j = 0; j < GAME_Y; j++) {
                 struct Door *cur = &((user->door)[level][i][j]);
@@ -285,7 +328,7 @@ void update_user(struct User* user) {
                 fprintf(fptr, "\n");
             }
     
-    for (int level = 0; level < 4; level++) // theme
+    for (int level = 0; level < user->number_of_floor; level++) // theme
         for (int i = 0; i < GAME_X; i++) {
             for (int j = 0; j < GAME_Y; j++)
                 fprintf(fptr, "%c", user->theme[level][i][j]);
@@ -309,10 +352,6 @@ void load_miniuser(char username[MAX_SIZE], struct miniUser* miniuser) {
     fgets(line, MAX_SIZE, fptr); // first game
     trim(line);
     miniuser->first_game = get_num(line);
-    fgets(line, MAX_SIZE, fptr); // level
-    fgets(line, MAX_SIZE, fptr); // user pos
-    fgets(line, MAX_SIZE, fptr); // bag.number of food
-    fgets(line, MAX_SIZE, fptr); // food type
     fgets(line, MAX_SIZE, fptr); // score
     trim(line);
     miniuser->score = get_num(line);

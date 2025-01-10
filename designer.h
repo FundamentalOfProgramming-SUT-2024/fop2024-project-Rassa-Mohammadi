@@ -69,34 +69,6 @@ void update_theme(struct User* user, int level, struct Room* room) {
 }
 
 int create_room(struct User* user, char ***map, struct Point p, int height, int width, struct Room** rooms, int index, int level) {
-    // create border
-    if ((*map)[p.x][p.y] != ' ' || (*map)[p.x][p.y + width + 1] != ' ')
-        return 0;
-    (*map)[p.x][p.y] = '_'; // top left
-    (*map)[p.x][p.y + width + 1] = '_'; // top right
-    for (int j = 0; j < width; j++) {
-        if ((*map)[p.x][p.y + 1 + j] != ' ' || (*map)[p.x + height + 1][p.y + 1 + j] != ' ')
-            return 0;
-        (*map)[p.x][p.y + 1 + j] = '_';
-        (*map)[p.x + height + 1][p.y + 1 + j] = '_';
-    }
-    if ((*map)[p.x + height + 1][p.y] != ' ' || (*map)[p.x + height + 1][p.y + width + 1] != ' ')
-        return 0;
-    (*map)[p.x + height + 1][p.y] = '|'; // bottom left
-    (*map)[p.x + height + 1][p.y + width + 1] = '|'; // bottom right
-    for (int i = 0; i < height; i++) {
-        if ((*map)[p.x + 1 + i][p.y] != ' ' || (*map)[p.x + 1 + i][p.y + width + 1] != ' ')
-            return 0;
-        (*map)[p.x + 1 + i][p.y] = '|';
-        (*map)[p.x + 1 + i][p.y + width + 1] = '|';
-    }
-    // fill room
-    for (int i = 0; i < height; i++)
-        for (int j = 0; j < width; j++) {
-            if ((*map)[p.x + 1 + i][p.y + 1 + j] != ' ')
-                return 0;
-            (*map)[p.x + 1 + i][p.y + 1 + j] = '.';
-        }
     (*rooms)[index].p = create_point(p.x, p.y);
     (*rooms)[index].height = height;
     (*rooms)[index].width = width;
@@ -111,6 +83,34 @@ int create_room(struct User* user, char ***map, struct Point p, int height, int 
     corners[4 * index + 1] = create_point(p.x + height + 1, p.y);
     corners[4 * index + 2] = create_point(p.x, p.y + width + 1);
     corners[4 * index + 3] = create_point(p.x + height + 1, p.y + width + 1);
+    return 1;
+}
+
+void draw_room(char ***map, struct Room* room) {
+    for (int j = 0; j < room->width + 2; j++)
+        (*map)[room->p.x][room->p.y + j] = '_';
+
+    for (int j = 1; j < room->width + 1; j++)
+        (*map)[room->p.x + room->height + 1][room->p.y + j] = '_';
+    
+    for (int i = 1; i < room->height + 2; i++) {
+        (*map)[room->p.x + i][room->p.y] = '|';
+        (*map)[room->p.x + i][room->p.y + room->width + 1] = '|';
+    }
+    for (int i = 0; i < room->height; i++)
+        for (int j = 0; j < room->width; j++)
+            (*map)[room->p.x + i + 1][room->p.y + j + 1] = '.';
+}
+
+int check_rooms_dist(struct Room** rooms, int index) {
+    int X_1 = (*rooms)[index].p.x - 5, X_2 = (*rooms)[index].p.x + (*rooms)[index].height + 1 + 5;
+    int Y_1 = (*rooms)[index].p.y - 5, Y_2 = (*rooms)[index].p.y + (*rooms)[index].width + 1 + 5;
+    for (int i = 0; i < index; i++) {
+        int x_1 = (*rooms)[i].p.x - 5, x_2 = (*rooms)[i].p.x + (*rooms)[i].height + 1 + 5;
+        int y_1 = (*rooms)[i].p.y - 5, y_2 = (*rooms)[i].p.y + (*rooms)[i].width + 1 + 5;
+        if (X_1 <= x_2 && Y_1 <= y_2 && x_1 <= X_2 && y_1 <= Y_2)
+            return 0;
+    }
     return 1;
 }
 
@@ -218,14 +218,7 @@ void generate_staircase(char ***map, struct Point* p) {
     p->x = tmp.x, p->y = tmp.y;
 }
 
-// int get_gold(char c) {
-//     if (c == 'g')
-//         return 1;
-//     else if (c == 'G')
-//         return 1 + rand() % (3 - DIFFICULTY);
-// }
-
-void generate_gold(char ***map, struct Room* room) {
+void generate_gold(struct User* user, char ***map, struct Room* room, int level) {
     if (room->type == 'r' || room->type == 'n') {
         int has_gold = rand() % (2 + DIFFICULTY);
         while (!has_gold) {
@@ -234,6 +227,16 @@ void generate_gold(char ***map, struct Room* room) {
             if ((*map)[x][y] == '.') {
                 (*map)[x][y] = 'g';
                 --has_gold;
+                int num = 1 + rand() % 4;
+                int p = rand() % 5; // 0: black gold, else: normal
+                if (p == 0) {
+                    (user->gold)[level][x][y].type = 'b';
+                    (user->gold)[level][x][y].cnt = 3 * num;
+                }
+                else {
+                    (user->gold)[level][x][y].type = 'n';
+                    (user->gold)[level][x][y].cnt = num;
+                }
             }
         }
     }
@@ -298,48 +301,126 @@ void generate_food(char ***map, struct Room* room) {
     }
 }
 
+void generate_weapon(char ***map, struct Room* room) {
+    if (room->type == 't' || room->type == 'e')
+        return;
+    char tmp[] = {'m', 'd', 'M', 'n', 's'}; // mace, dagger, magic wand, normal arrow, sword
+    for (int i = 0; i < 5; i++) {
+        if (rand() % 5 == 0) {
+            while (true) {
+                int x = room->p.x + 1 + rand() % room->height;
+                int y = room->p.y + 1 + rand() % room->width;
+                if ((*map)[x][y] == '.') {
+                    (*map)[x][y] = tmp[i];
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void generate_potion(char ***map, struct Room* room) {
+    if (room->type == 'e') { // enchant
+        int number_of_potion = 4 + rand() % 3;
+        while (number_of_potion) {
+            int x = room->p.x + 1 + rand() % room->height;
+            int y = room->p.y + 1 + rand() % room->width;
+            if ((*map)[x][y] == '.') {
+                int type = rand() % 3;
+                switch(type) {
+                    case 0: // health
+                        (*map)[x][y] = 'H';
+                        break;
+                    case 1: // speed
+                        (*map)[x][y] = 'S';
+                        break;
+                    case 2: // damage
+                        (*map)[x][y] = 'D';
+                        break;
+                }
+                --number_of_potion;
+            }
+        }
+    }
+    else if (room->type != 't') { // normal and nightmare
+        if (rand() % 3 == 0) {
+            while (true) {
+                int x = room->p.x + 1 + rand() % room->height;
+                int y = room->p.y + 1 + rand() % room->width;
+                if ((*map)[x][y] == '.') {
+                    int type = rand() % 3;
+                    switch(type) {
+                        case 0: // health
+                            (*map)[x][y] = 'H';
+                            break;
+                        case 1: // speed
+                            (*map)[x][y] = 'S';
+                            break;
+                        case 2: // damage
+                            (*map)[x][y] = 'D';
+                            break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+}
+
 void add_items(struct User* user, char ***map, struct Room* room, int level) { // add items to room
     generate_pillar(map, room);
     generate_traps(user, room, level);
-    generate_gold(map, room);
+    generate_gold(user, map, room, level);
     generate_food(map, room);
+    generate_weapon(map, room);
+    generate_potion(map, room);
     create_secret_doors(user, map, room, level);
 }
 
 void generate_map(struct User* user) {
+    clear();
+    print_message_with_color(LINES / 3, COLS / 3 - 10, "It may take up to 30 seconds. Thank you for your patience.", 3);
+    refresh();
     time_t st;
     time(&st);
+    user->number_of_floor = 4 + rand() % 2;
     ++user->number_of_games;
     user->level = 0;
     struct Point staircaise;
-    for (int level = 0; level < 4; level++) {
+    for (int level = 0; level < user->number_of_floor; level++) {
         init_user(user, level);
         char ***map = &(user->map[level]);
         int valid_map = 1;
-        number_of_rooms = 6 + rand() % 3;
+        number_of_rooms = 6 + rand() % 2;
         struct Room* rooms = malloc(sizeof(struct Room) * number_of_rooms);
         corners = malloc(sizeof(struct Point) * number_of_rooms * 4);
         do {
             time_t now;
             time(&now);
-            if (difftime(now, st) > 2.5) {
+            if (difftime(now, st) > 30) {
                 clear();
                 print_message_with_color(LINES / 3, COLS / 3, "Failed to generate map!", 2);
                 print_message_with_color(LINES / 3 + 2, COLS / 3, "Press any key to regenerate ...", 3);
                 refresh();
                 getch();
                 clear();
+                refresh();
                 generate_map(user);
                 return;
             }
             valid_map = 1;
             clear_map(map);
-            for (int i = 0; i < number_of_rooms; i++) {
-                int height = 4 + rand() % 3, width = 4 + rand() % 9;
+            for (int i = 0; i < number_of_rooms && valid_map; i++) {
+                int height = 4 + rand() % 3, width = 4 + rand() % 6;
                 int x = rand() % (GAME_X - height - 1), y = rand() % (GAME_Y - width - 1);
-                valid_map &= create_room(user, map, create_point(x, y), height, width, &rooms, i, level);
+                create_room(user, map, create_point(x, y), height, width, &rooms, i, level);
+                valid_map &= check_rooms_dist(&rooms, i);
             }
-            for (int i = 0; i < number_of_rooms - 1; i++) {
+            if (valid_map) {
+                for (int i = 0; i < number_of_rooms; i++)
+                    draw_room(map, &rooms[i]);
+            }
+            for (int i = 0; i < number_of_rooms - 1 && valid_map; i++) {
                 int delta_x = rand() % (rooms[i].height - 1), delta_y = rand() % (rooms[i].width - 1);
                 struct Point p1 = create_point(rooms[i].p.x + 1 + delta_x, rooms[i].p.y + 1 + delta_y);
                 delta_x = rand() % (rooms[i + 1].height - 1), delta_y = rand() % (rooms[i + 1].width - 1);
@@ -353,9 +434,7 @@ void generate_map(struct User* user) {
             valid_map &= check_corners(map);
         } while (!valid_map);
         trim_rooms(map);
-        if (level != 3)
-            generate_staircase(map, &staircaise);
-        if (level == 3) { // add treasure room
+        if (level == user->number_of_floor - 1) { // add treasure room
             int index = rand() % number_of_rooms;
             rooms[index].type = 't';
         }
@@ -363,6 +442,8 @@ void generate_map(struct User* user) {
             update_theme(user, level, &rooms[i]);
             add_items(user, map, &rooms[i], level);
         }
+        if (level != user->number_of_floor - 1)
+            generate_staircase(map, &staircaise);
         if (level == 0)
             determine_initial_position(user, map);
         // determine_doors_type(user, map);
@@ -392,8 +473,39 @@ void print_map(struct User* user, int reveal) {
                 color = 1;
                 break;
             }
-            if ((user->mask)[user->level][i][j] || reveal) {
-                print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], color);
+            if ((user->mask)[user->level][i][j] == 1 || reveal) {
+                if ((user->map)[user->level][i][j] == 'g') {
+                    if ((user->gold)[user->level][i][j].type == 'n')
+                        print_character_with_color(i + ST_X, j + ST_Y, 'G', 8);
+                    else
+                        print_character_with_color(i + ST_X, j + ST_Y, 'G', 5);
+                }
+                else if ((user->map)[user->level][i][j] == 'f') {
+                    print_character_with_color(i + ST_X, j + ST_Y, 'f', 3);
+                }
+                else if (is_weapon((user->map)[user->level][i][j])) {
+                    char c = (user->map)[user->level][i][j];
+                    if (c == 'm') {
+                        print_message_with_color(i + ST_X, j + ST_Y, "⚒", 6);
+                    }
+                    else if (c == 'd') {
+                        print_message_with_color(i + ST_X, j + ST_Y, "🗡", 6);
+                    }
+                    else if (c ==  'M') {
+                        print_message_with_color(i + ST_X, j + ST_Y, "M", 6);
+                    }
+                    else if (c == 'n') {
+                        print_message_with_color(i + ST_X, j + ST_Y, "➳", 6);
+                    }
+                    else {
+                        print_message_with_color(i + ST_X, j + ST_Y, "⚔", 6);
+                    }
+                }
+                else if (is_potion((user->map)[user->level][i][j])) {
+                    print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], 4);
+                }
+                else
+                    print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], color);
             }
             else
                 mvprintw(i + ST_X, j + ST_Y, " ");
@@ -415,11 +527,9 @@ void print_hunger(int x, int y, struct User* user) {
 
 void print_status(struct User* user) {
     move(GAME_X + ST_X, GAME_Y / 3);
-    attroff(COLOR_PAIR(1));
-    attron(COLOR_PAIR(4));
-    printw("Score: %d \t Gold: %d \t Health: %d \t Games: %d", user->score, user->gold, user->health, user->number_of_games);
-    attroff(COLOR_PAIR(4));
-    attron(COLOR_PAIR(1));
+    change_color(4);
+    printw("Score: %d \t Gold: %d \t Health: %d \t Games: %d", user->score, user->golds, user->health, user->number_of_games);
+    undo_color(4);
     print_hunger(GAME_X + ST_X + 1, GAME_Y / 3 + 1, user);
 }
 

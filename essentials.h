@@ -28,6 +28,11 @@ struct Trap {
     int damage;
 };
 
+struct Gold {
+    char type; // n: normal, b: balck
+    int cnt; // value
+};
+
 struct Room {
     struct Point p;
     int height, width;
@@ -37,7 +42,14 @@ struct Room {
 struct Bag {
     int number_of_food;
     char food[5];
+    int number_of_weapon;
+    char weapon[5];
+    // potions
+    int health_potion;
+    int speed_potion;
+    int damage_potion;
 };
+
 
 struct User {
     char username[MAX_SIZE];
@@ -45,18 +57,20 @@ struct User {
     char email[MAX_SIZE];
     int number_of_games;
     time_t first_game;
+    int number_of_floor;
     int level;
-    char **map[4];
-    int mask[4][MAX_SIZE][MAX_SIZE];
-    char theme[4][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare
+    char **map[5];
+    int mask[5][MAX_SIZE][MAX_SIZE];
+    char theme[5][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare
     struct Point pos;
     struct Bag bag;
     int score;
-    int gold;
+    int golds;
     int health;
     int hunger;
-    struct Door door[4][MAX_SIZE][MAX_SIZE];
-    struct Trap trap[4][MAX_SIZE][MAX_SIZE];
+    struct Gold gold[5][MAX_SIZE][MAX_SIZE];
+    struct Door door[5][MAX_SIZE][MAX_SIZE];
+    struct Trap trap[5][MAX_SIZE][MAX_SIZE];
 };
 
 struct miniUser {
@@ -96,27 +110,21 @@ void undo_color(int color) {
 }
 
 void print_message_with_color(int x, int y, char message[], int color) {
-    attroff(COLOR_PAIR(1));
-    attron(COLOR_PAIR(color));
+    change_color(color);
     mvprintw(x, y, "%s", message);
-    attroff(COLOR_PAIR(color));
-    attron(COLOR_PAIR(1));
+    undo_color(color);
 }
 
 void print_number_with_color(int x, int y, int n, int color) {
-    attroff(COLOR_PAIR(1));
-    attron(COLOR_PAIR(color));
+    change_color(color);
     mvprintw(x, y, "%d", n);
-    attroff(COLOR_PAIR(color));
-    attron(COLOR_PAIR(1));
+    undo_color(color);
 }
 
 void print_character_with_color(int x, int y, char c, int color) {
-    attroff(COLOR_PAIR(1));
-    attron(COLOR_PAIR(color));
+    change_color(color);
     mvprintw(x, y, "%c", c);
-    attroff(COLOR_PAIR(color));
-    attron(COLOR_PAIR(1));
+    undo_color(color);
 }
 
 void init_user(struct User* user, int level) {
@@ -126,12 +134,15 @@ void init_user(struct User* user, int level) {
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++)
             (user->mask)[level][i][j] = 0;
-    // user->gold = 0;
+    // user->golds = 0;
     user->bag.number_of_food = 0;
+    user->bag.number_of_weapon = 0;
+    user->bag.speed_potion = user->bag.health_potion = user->bag.damage_potion = 0;
     user->health = 10;
     user->hunger = 10;
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++) {
+            (user->gold)[level][i][j].type = 'N'; // Not available
             (user->door)[level][i][j].exist = (user->door)[level][i][j].has_password = 0;
             (user->trap)[level][i][j].exist = 0;
             (user->theme)[level][i][j] = '.';
@@ -177,19 +188,6 @@ int is_in_map(struct Point p) {
     return p.x >= 0 && p.y >= 0 && p.x < GAME_X && p.y < GAME_Y;
 }
 
-int is_in_room(char ***map, struct Point p) {
-    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f';
-}
-
-int is_new_room(struct User* user) {
-    for (int dir = 0; dir < 4; dir++) {
-        struct Point nxt = next_point(user->pos, dir);
-        if (is_in_map(nxt)  && is_in_room(&(user->map[user->level]), nxt))
-            return !user->mask[user->level][nxt.x][nxt.y];
-    }
-    return 0;
-}
-
 int is_in_corridor(char ***map, struct Point p) {
     return (*map)[p.x][p.y] == '+' || (*map)[p.x][p.y] == '#';
 }
@@ -203,6 +201,27 @@ int is_corner(struct Point p) {
 
 int is_food(struct User* user) {
     return user->map[user->level][user->pos.x][user->pos.y] == 'f';
+}
+
+int is_weapon(char c) {
+    return c == 'm' || c == 'd' || c == 'M' || c == 'n' || c == 's';
+}
+
+int is_potion(char c) {
+    return c == 'H' || c == 'S' || c == 'D'; 
+}
+
+int is_in_room(char ***map, struct Point p) {
+    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f' || is_weapon((*map)[p.x][p.y]) || is_potion((*map)[p.x][p.y]);
+}
+
+int is_new_room(struct User* user) {
+    for (int dir = 0; dir < 4; dir++) {
+        struct Point nxt = next_point(user->pos, dir);
+        if (is_in_map(nxt)  && is_in_room(&(user->map[user->level]), nxt))
+            return !user->mask[user->level][nxt.x][nxt.y];
+    }
+    return 0;
 }
 
 int not_restricted(struct User* user, char ***map, struct Point p) {

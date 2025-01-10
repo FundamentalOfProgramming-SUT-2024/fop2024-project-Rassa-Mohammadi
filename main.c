@@ -23,6 +23,10 @@ void appear_nightmare(struct Point, int);
 void disappear_nightmare(struct Point, int);
 void hunger_menu();
 void consume_food(int);
+void add_weapon(char);
+void add_potion(char);
+void weapon_menu();
+void potion_menu();
 int check_health();
 void quit_game();
 
@@ -361,9 +365,13 @@ void scoreboard_menu() {
     print_message_with_color(ST_X, ST_Y + 60, "Time", 4);
     // Users
     int user_pos;
-    for (int i = 0; i < USERS; i++)
-        if (!strcmp(user_list[i]->username, user.username))
-            user_pos = i;
+    if (!is_guest) {
+        for (int i = 0; i < USERS; i++)
+            if (!strcmp(user_list[i]->username, user.username))
+                user_pos = i;
+    }
+    else
+        user_pos = -1;
     int cur = 0, key = -1, sz = (USERS >= 4? 4: USERS), st = 0;
     timeout(0);
     do {
@@ -455,6 +463,76 @@ void consume_food(int x) {
     }
 }
 
+void add_weapon(char type) {
+    if (user.bag.number_of_weapon == 5)
+        return;
+    user.bag.weapon[user.bag.number_of_weapon] = type;
+    ++user.bag.number_of_weapon;
+}
+
+void add_potion(char type) {
+    switch(type) {
+        case 'H':
+            ++user.bag.health_potion;
+            break;
+        case 'S':
+            ++user.bag.speed_potion;
+            break;
+        case 'D':
+            ++user.bag.damage_potion;
+            break;
+    }
+}
+
+void weapon_menu() {
+    clear();
+    timeout(-1);
+    curs_set(FALSE);
+    int x = LINES / 3 - 2, y = COLS / 3;
+    print_message_with_color(x + 1, y - 10, "The following weapons are available in your bag. choose one:", 2);
+    char *options[user.bag.number_of_weapon];
+    for (int i = 0; i < user.bag.number_of_weapon; i++) {
+        options[i] = malloc(sizeof(char) * 20);
+        if (user.bag.weapon[i] == 'm')
+            strcpy(options[i], "Mace");
+        else if (user.bag.weapon[i] == 'd')
+            strcpy(options[i], "Dagger");
+        else if (user.bag.weapon[i] == 'M')
+            strcpy(options[i], "Magic Wand");
+        else if (user.bag.weapon[i] == 'n')
+            strcpy(options[i], "Normal Arrow");
+        else
+            strcpy(options[i], "Sword");
+    }
+    int choice = create_list(create_point(x + 3, y), options, user.bag.number_of_weapon, 6);
+    timeout(0);
+}
+
+void potion_menu() {
+    clear();
+    timeout(-1);
+    int x = LINES / 3 - 2, y = COLS / 3;
+    print_message_with_color(x + 1, y - 10, "The following potions are available in your bag:", 2);
+    char *options[3];
+    for (int i = 0; i < 3; i++)
+        options[i] = malloc(sizeof(char) * 20);
+    // health
+    strcpy(options[0], "Health (");
+    strcat(options[0], get_str(user.bag.health_potion));
+    strcat(options[0], ")");
+    // speed
+    strcpy(options[1], "Speed (");
+    strcat(options[1], get_str(user.bag.speed_potion));
+    strcat(options[1], ")");
+    // damage
+    strcpy(options[2], "Damage (");
+    strcat(options[2], get_str(user.bag.damage_potion));
+    strcat(options[2], ")");
+
+    int choice = create_list(create_point(x + 3, y), options, 3, 5);
+    timeout(0);
+}
+
 void move_player(int key, char ***map) {
     struct Point nxt;
     if (key == KEY_UP) {
@@ -477,6 +555,8 @@ void move_player(int key, char ***map) {
         if (is_in_map(nxt) && not_restricted(&user, map, nxt))
             user.pos.x = nxt.x, user.pos.y = nxt.y;
     }
+    if ((*map)[user.pos.x][user.pos.y] == '_' || (*map)[user.pos.x][user.pos.y] == '|')
+        (*map)[user.pos.x][user.pos.y] = '?';
 }
 
 void appear_map(struct Point p, int depth) {
@@ -518,7 +598,7 @@ void appear_nightmare(struct Point p, int depth) {
 }
 
 void disappear_nightmare(struct Point p, int depth) {
-    user.mask[user.level][p.x][p.y] = 0;
+    user.mask[user.level][p.x][p.y] = 2;
     if (!depth)
         return;
     for (int dir = 0; dir < 8; dir++) {
@@ -601,10 +681,11 @@ void play_game() {
         if (user.map[user.level][user.pos.x][user.pos.y] == 'g') {
             // int cnt = get_gold(user.map[user.level][user.pos.x][user.pos.y]);
             if (user.theme[user.level][user.pos.x][user.pos.y] != 'n') {
-                user.gold++;
-                user.score++;
+                user.golds += user.gold[user.level][user.pos.x][user.pos.y].cnt;
+                user.score += user.gold[user.level][user.pos.x][user.pos.y].cnt;
+                clean_area(create_point(2, 0), create_point(2, COLS - 1));
                 print_message_with_color(2, 0, "You gained ", 8);
-                print_number_with_color(2, 11, 1, 8);
+                print_number_with_color(2, 11, user.gold[user.level][user.pos.x][user.pos.y].cnt, 8);
                 print_message_with_color(2, 13, "golds!", 8);
                 LAST_REFRESH[2] = now;
             }
@@ -613,11 +694,13 @@ void play_game() {
         // food
         if (is_food(&user)) {
             if (user.bag.number_of_food == 5) {
+                clean_area(create_point(1, 0), create_point(1, COLS - 1));
                 print_message_with_color(1, 0, "Bag is full! Can not pick food!", 2);
                 LAST_REFRESH[1] = now;
             }
             else {
                 if (user.theme[user.level][user.pos.x][user.pos.y] != 'n') {
+                    clean_area(create_point(1, 0), create_point(1, COLS - 1));
                     print_message_with_color(1, 0, "Food has been added to your bag!", 3);
                     LAST_REFRESH[1] = now;
                     user.bag.food[user.bag.number_of_food] = user.map[user.level][user.pos.x][user.pos.y];
@@ -626,9 +709,20 @@ void play_game() {
                 user.map[user.level][user.pos.x][user.pos.y] = '.';
             }
         }
+        // weapon
+        if (is_weapon(user.map[user.level][user.pos.x][user.pos.y])) {
+            add_weapon(user.map[user.level][user.pos.x][user.pos.y]);
+            user.map[user.level][user.pos.x][user.pos.y] = '.';
+        }
+        // potion
+        if (is_potion(user.map[user.level][user.pos.x][user.pos.y])) {
+            add_potion(user.map[user.level][user.pos.x][user.pos.y]);
+            user.map[user.level][user.pos.x][user.pos.y] = '.';
+        }
         // enter new room
         if (user.map[user.level][user.pos.x][user.pos.y] == '+' || user.map[user.level][user.pos.x][user.pos.y] == '_' || user.map[user.level][user.pos.x][user.pos.y] == '|') {
             if (is_new_room(&user)) {
+                clean_area(create_point(0, 0), create_point(0, COLS - 1));
                 print_message_with_color(0, 0, "You have entered a new room", 2);
                 LAST_REFRESH[0] = now;
             }
@@ -641,8 +735,9 @@ void play_game() {
         else if (user.map[user.level][user.pos.x][user.pos.y] == '>') {
             ++user.level;
             if (!user.mask[user.level][user.pos.x][user.pos.y]) {
+                clean_area(create_point(0, 0), create_point(0, COLS - 1));
                 print_message_with_color(0, 0, "You have entered a new floor. Floor level is ", 2);
-                print_number_with_color(0, 45, user.level, 2);
+                print_number_with_color(0, 45, user.level + 1, 2);
                 LAST_REFRESH[0] = now;
             }
             timeout(-1);
@@ -663,6 +758,10 @@ void play_game() {
             reveal = 1 - reveal;
         if (key == 'E')
             hunger_menu();
+        if (key == 'i')
+            weapon_menu();
+        if (key == 'p')
+            potion_menu();
     } while (key != 'Q');
     timeout(-1);
     update_user(&user);
