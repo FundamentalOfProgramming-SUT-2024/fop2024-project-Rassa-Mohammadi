@@ -16,10 +16,12 @@ void difficulty_menu();
 void hero_color_menu();
 void music_menu();
 void play_game();
-void move_player(int, char***);
+int move_player(int, char***);
+void move_in_one_direction();
 void play_trap(struct Point);
 void appear_map(struct Point, int);
 void appear_nightmare(struct Point, int);
+void appear_trap_secret();
 void disappear_nightmare(struct Point, int);
 void hunger_menu();
 void consume_food(int);
@@ -533,30 +535,39 @@ void potion_menu() {
     timeout(0);
 }
 
-void move_player(int key, char ***map) {
+int move_player(int key, char ***map) {
     struct Point nxt;
-    if (key == KEY_UP) {
-        nxt = next_point(user.pos, 0);
-        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
-            user.pos.x = nxt.x, user.pos.y = nxt.y;
+    int dir = get_dir(key);
+    if (dir == -1)
+        return 0;
+    nxt = next_point(user.pos, dir);
+    if (is_in_map(nxt) && not_restricted(&user, map, nxt)) {
+        user.pos.x = nxt.x, user.pos.y = nxt.y;
+        if ((*map)[user.pos.x][user.pos.y] == '_' || (*map)[user.pos.x][user.pos.y] == '|')
+            (*map)[user.pos.x][user.pos.y] = '?';
+        return 1;
     }
-    else if (key == KEY_RIGHT) {
-        nxt = next_point(user.pos, 1);
-        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
-            user.pos.x = nxt.x, user.pos.y = nxt.y;
+    return 0;
+}
+
+void move_in_one_direction() {
+    timeout(-1);
+    int key = getch();
+    while (true) {
+        int dir = get_dir(key);
+        if (dir == -1)
+            break;
+        struct Point nxt = next_point(user.pos, dir);
+        char c = user.map[user.level][nxt.x][nxt.y];
+        if (c == '.' || c == '#' || c == '+' || c == '?') {
+            move_player(key, &(user.map[user.level]));
+            if (user.theme[user.level][user.pos.x][user.pos.y] != 'n')
+                appear_map(user.pos, 5);
+        }
+        else
+            break;
     }
-    else if (key == KEY_DOWN) {
-        nxt = next_point(user.pos, 2);
-        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
-            user.pos.x = nxt.x, user.pos.y = nxt.y;
-    }
-    else if (key == KEY_LEFT) {
-        nxt = next_point(user.pos, 3);
-        if (is_in_map(nxt) && not_restricted(&user, map, nxt))
-            user.pos.x = nxt.x, user.pos.y = nxt.y;
-    }
-    if ((*map)[user.pos.x][user.pos.y] == '_' || (*map)[user.pos.x][user.pos.y] == '|')
-        (*map)[user.pos.x][user.pos.y] = '?';
+    timeout(0);
 }
 
 void appear_map(struct Point p, int depth) {
@@ -582,6 +593,19 @@ void appear_map(struct Point p, int depth) {
                 if (is_in_room(&(user.map[level]), nxt) && depth == 5)
                     appear_map(nxt, 5);
             }
+        }
+    }
+}
+
+void appear_trap_secret() {
+    struct Point nxt;
+    for (int dir = 0; dir < 8; dir++) {
+        nxt = next_point(user.pos, dir);
+        if (user.trap[user.level][nxt.x][nxt.y].exist)
+            user.map[user.level][nxt.x][nxt.y] = '^';
+        if (user.door[user.level][nxt.x][nxt.y].exist && (user.map[user.level][nxt.x][nxt.y] == '|' || user.map[user.level][nxt.x][nxt.y] == '_')) {
+            user.map[user.level][nxt.x][nxt.y] = '?';
+            user.mask[user.level][nxt.x][nxt.y] = 1;
         }
     }
 }
@@ -647,7 +671,7 @@ void play_game() {
     clear();
     int key;
     time_t now, st_enchant;
-    int is_in_enchant = 0, in_room = 1;
+    int is_in_enchant = 0, is_gmove = 0, num_gmove = 0;
     time(&now);
     init_time(now);
     do {
@@ -678,7 +702,7 @@ void play_game() {
             play_trap(create_point(user.pos.x, user.pos.y));
         check_health();
         // gold
-        if (user.map[user.level][user.pos.x][user.pos.y] == 'g') {
+        if (user.map[user.level][user.pos.x][user.pos.y] == 'g' && !is_gmove) {
             // int cnt = get_gold(user.map[user.level][user.pos.x][user.pos.y]);
             if (user.theme[user.level][user.pos.x][user.pos.y] != 'n') {
                 user.golds += user.gold[user.level][user.pos.x][user.pos.y].cnt;
@@ -692,7 +716,7 @@ void play_game() {
             user.map[user.level][user.pos.x][user.pos.y] = '.';
         }
         // food
-        if (is_food(&user)) {
+        if (is_food(&user) && !is_gmove) {
             if (user.bag.number_of_food == 5) {
                 clean_area(create_point(1, 0), create_point(1, COLS - 1));
                 print_message_with_color(1, 0, "Bag is full! Can not pick food!", 2);
@@ -710,12 +734,12 @@ void play_game() {
             }
         }
         // weapon
-        if (is_weapon(user.map[user.level][user.pos.x][user.pos.y])) {
+        if (is_weapon(user.map[user.level][user.pos.x][user.pos.y]) && !is_gmove) {
             add_weapon(user.map[user.level][user.pos.x][user.pos.y]);
             user.map[user.level][user.pos.x][user.pos.y] = '.';
         }
         // potion
-        if (is_potion(user.map[user.level][user.pos.x][user.pos.y])) {
+        if (is_potion(user.map[user.level][user.pos.x][user.pos.y]) && !is_gmove) {
             add_potion(user.map[user.level][user.pos.x][user.pos.y]);
             user.map[user.level][user.pos.x][user.pos.y] = '.';
         }
@@ -753,7 +777,15 @@ void play_game() {
         if (user.theme[user.level][user.pos.x][user.pos.y] == 'n')
             disappear_nightmare(user.pos, 2);
         key = getch();
-        move_player(key, &(user.map[user.level]));
+        if (is_gmove) {
+            num_gmove += move_player(key, &(user.map[user.level]));
+            if (num_gmove == 2) {
+                num_gmove = 0;
+                is_gmove = 0;
+            }
+        }
+        else
+            move_player(key, &(user.map[user.level]));
         if (key == 'M')
             reveal = 1 - reveal;
         if (key == 'E')
@@ -762,6 +794,12 @@ void play_game() {
             weapon_menu();
         if (key == 'p')
             potion_menu();
+        if (key == 'f')
+            move_in_one_direction();
+        if (key == 'g')
+            is_gmove = 1;
+        if (key == 's')
+            appear_trap_secret();
     } while (key != 'Q');
     timeout(-1);
     update_user(&user);

@@ -230,6 +230,26 @@ int not_restricted(struct User* user, char ***map, struct Point p) {
     return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O' && (*map)[p.x][p.y] != ' ';
 }
 
+int get_dir(int key) {
+    if (key == KEY_UP || key == 'j')
+        return 0;
+    else if (key == KEY_RIGHT || key == 'l')
+        return 1;
+    else if (key == KEY_DOWN || key == 'k')
+        return 2;
+    else if (key == KEY_LEFT || key == 'h')
+        return 3;
+    else if (key == 'y')
+        return 4;
+    else if (key == 'u')
+        return 5;
+    else if (key == 'n')
+        return 6;
+    else if (key == 'b')
+        return 7;
+    return -1;
+}
+
 int check_corners(char ***map) {
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++)

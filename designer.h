@@ -379,7 +379,7 @@ void add_items(struct User* user, char ***map, struct Room* room, int level) { /
 
 void generate_map(struct User* user) {
     clear();
-    print_message_with_color(LINES / 3, COLS / 3 - 10, "It may take up to 30 seconds. Thank you for your patience.", 3);
+    print_message_with_color(LINES / 3, COLS / 3 - 10, "It may take up to 60 seconds. Thank you for your patience.", 3);
     refresh();
     time_t st;
     time(&st);
@@ -397,7 +397,7 @@ void generate_map(struct User* user) {
         do {
             time_t now;
             time(&now);
-            if (difftime(now, st) > 30) {
+            if (difftime(now, st) > 60) {
                 clear();
                 print_message_with_color(LINES / 3, COLS / 3, "Failed to generate map!", 2);
                 print_message_with_color(LINES / 3 + 2, COLS / 3, "Press any key to regenerate ...", 3);
