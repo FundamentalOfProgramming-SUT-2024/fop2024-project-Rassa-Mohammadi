@@ -61,7 +61,7 @@ struct User {
     int level;
     char **map[5];
     int mask[5][MAX_SIZE][MAX_SIZE];
-    char theme[5][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare
+    char theme[5][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare | 1: normal 2: aala 3: jadoee 4: fased
     struct Point pos;
     struct Bag bag;
     int score;
@@ -81,8 +81,8 @@ struct miniUser {
     int score;
 };
 
-time_t LAST_REFRESH[3], LAST_EAT;
-int USERS;
+time_t LAST_MESSAGE_REFRESH[3], LAST_EAT, LAST_FOOD_REFRESH;
+int USERS, DELAY = 40000;
 int DIFFICULTY = 0; // 0: Easy, 1: Medium, 2: HARD
 int GAME_X = 30, GAME_Y = 120;
 int ST_X = 3, ST_Y = 4;
@@ -250,6 +250,16 @@ int get_dir(int key) {
     return -1;
 }
 
+char get_theme(char theme[MAX_SIZE][MAX_SIZE], int x, int y) {
+    for (int dir = 0; dir < 8; dir++) {
+        int n_x = x + D_X[dir];
+        int n_y = y + D_Y[dir];
+        if (theme[n_x][n_y] >= 'a' && theme[n_x][n_y] <= 'z')
+            return theme[n_x][n_y];
+    }
+    return 'r';
+}
+
 int check_corners(char ***map) {
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++)
@@ -318,13 +328,13 @@ char* get_time(time_t t) {
 
 void init_time(time_t t) {
     for (int line = 0; line < 3; line++)
-        LAST_REFRESH[line] = t;
+        LAST_MESSAGE_REFRESH[line] = t;
     LAST_EAT = t;
 }
 
 int refresh_message(time_t t, int line) {
-    if (difftime(t, LAST_REFRESH[line]) > 2) {
-        LAST_REFRESH[line] = t;
+    if (difftime(t, LAST_MESSAGE_REFRESH[line]) > 2) {
+        LAST_MESSAGE_REFRESH[line] = t;
         return 1;
     }
     return 0;

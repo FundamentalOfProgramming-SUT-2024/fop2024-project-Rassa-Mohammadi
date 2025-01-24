@@ -287,7 +287,7 @@ void create_secret_doors(struct User* user, char ***map, struct Room* room, int 
     }
 }
 
-void generate_food(char ***map, struct Room* room) {
+void generate_food(struct User* user, char ***map, struct Room* room, int level) {
     if (room->type != 't' && room->type != 'e') {
         int number_of_food = 1 + rand() % (3 - DIFFICULTY);
         while (number_of_food) {
@@ -296,6 +296,16 @@ void generate_food(char ***map, struct Room* room) {
             if ((*map)[x][y] == '.') {
                 (*map)[x][y] = 'f';
                 --number_of_food;
+                int type = rand() % 11;
+                if (type <= 4) // normal
+                    user->theme[level][x][y] = 1;
+                else if (type <= 6) // aala
+                    user->theme[level][x][y] = 2;
+                else if (type <= 8) // jadooee
+                    user->theme[level][x][y] = 3;
+                else // fased
+                    user->theme[level][x][y] = 4;
+                
             }
         }
     }
@@ -371,7 +381,7 @@ void add_items(struct User* user, char ***map, struct Room* room, int level) { /
     generate_pillar(map, room);
     generate_traps(user, room, level);
     generate_gold(user, map, room, level);
-    generate_food(map, room);
+    generate_food(user, map, room, level);
     generate_weapon(map, room);
     generate_potion(map, room);
     create_secret_doors(user, map, room, level);
@@ -469,6 +479,18 @@ void print_map(struct User* user, int reveal) {
             case 't':
                 color = 7;
                 break;
+            case 1:
+                color = 3;
+                break;
+            case 2:
+                color = 7;
+                break;
+            case 3:
+                color = 5;
+                break;
+            case 4:
+                color = 6;
+                break;
             default:
                 color = 1;
                 break;
@@ -481,7 +503,7 @@ void print_map(struct User* user, int reveal) {
                         print_character_with_color(i + ST_X, j + ST_Y, 'G', 5);
                 }
                 else if ((user->map)[user->level][i][j] == 'f') {
-                    print_character_with_color(i + ST_X, j + ST_Y, 'f', 3);
+                    print_character_with_color(i + ST_X, j + ST_Y, 'f', color);
                 }
                 else if (is_weapon((user->map)[user->level][i][j])) {
                     char c = (user->map)[user->level][i][j];

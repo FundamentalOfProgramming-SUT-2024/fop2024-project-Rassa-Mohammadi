@@ -29,12 +29,15 @@ void add_weapon(char);
 void add_potion(char);
 void weapon_menu();
 void potion_menu();
+void change_speed(int);
+void refresh_food(time_t);
 int check_health();
 void quit_game();
 
 struct User user;
-int is_guest, reveal;
+int is_guest, reveal, speed = 1;
 int hero_color = 1;
+time_t speed_boost;
 
 int main() {
     setlocale(LC_ALL, "");
@@ -423,6 +426,15 @@ void pregame_menu() {
     }
 }
 
+void change_speed(int state) {
+    if (state == 2) {
+        speed = 2;
+        time(&speed_boost);
+    }
+    else
+        speed = 1;
+}
+
 void hunger_menu() {
     clear();
     timeout(-1);
@@ -433,17 +445,33 @@ void hunger_menu() {
     refresh();
     char *options[user.bag.number_of_food];
     for (int i = 0; i < user.bag.number_of_food; i++) {
-        if (user.bag.food[i] == 'f') {
-            options[i] = malloc(sizeof(char) * 12);
+        options[i] = malloc(sizeof(char) * 12);
+        if (user.bag.food[i] == 1)
             strcpy(options[i], "Normal food");
-        }
-        // else
+        else if (user.bag.food[i] == 2)
+            strcpy(options[i], "Aala food");
+        else if (user.bag.food[i] == 3)
+            strcpy(options[i], "Magical food");
+        else
+            strcpy(options[i], "Rotten food");
     }
     int choice = create_list(create_point(x + 3, y), options, user.bag.number_of_food, 3);
+    if (!user.bag.number_of_food)
+        return;
     switch (user.bag.food[choice]) {
-        case 'f':
+        case 1:
             consume_food(3);
             break;
+        case 4:
+            consume_food(-1);
+            break;
+        case 2:
+            consume_food(3);
+            // add strength
+            break;
+        case 3:
+            consume_food(3);
+            change_speed(2);
         default:
             break;
     }
@@ -462,6 +490,18 @@ void consume_food(int x) {
         user.health += x;
         if (user.health > 10)
             user.health = 10;
+    }
+}
+
+void refresh_food(time_t now) {
+    if (difftime(now, LAST_FOOD_REFRESH) > 20 - 5 * DIFFICULTY) {
+        for (int i = 0; i < user.bag.number_of_food; i++) {
+            if (user.bag.food[i] == 1)
+                user.bag.food[i] = 4;
+            else if (user.bag.food[i] == 2 || user.bag.food[i] == 3)
+                user.bag.food[i] = 1;
+        }
+        LAST_FOOD_REFRESH = now;
     }
 }
 
@@ -535,7 +575,28 @@ void potion_menu() {
     timeout(0);
 }
 
+int move_player2x(int key, char ***map) {
+    int dir = get_dir(key);
+    if (dir == -1)
+        return 0;
+    struct Point nxt = next_point(user.pos, dir);
+    if (!is_in_map(nxt) || !not_restricted(&user, map, nxt))
+        return 0;
+    user.pos.x = nxt.x, user.pos.y = nxt.y;
+    if ((*map)[user.pos.x][user.pos.y] == '_' || (*map)[user.pos.x][user.pos.y] == '|')
+            (*map)[user.pos.x][user.pos.y] = '?';
+    struct Point nxt2 = next_point(nxt, dir);
+    if (!is_in_map(nxt2) || !not_restricted(&user, map, nxt2))
+        return 1;
+    user.pos.x = nxt2.x, user.pos.y = nxt2.y;
+    if ((*map)[user.pos.x][user.pos.y] == '_' || (*map)[user.pos.x][user.pos.y] == '|')
+            (*map)[user.pos.x][user.pos.y] = '?';
+    return 2;
+}
+
 int move_player(int key, char ***map) {
+    if (speed == 2)
+        return move_player2x(key, map);
     struct Point nxt;
     int dir = get_dir(key);
     if (dir == -1)
@@ -673,9 +734,16 @@ void play_game() {
     time_t now, st_enchant;
     int is_in_enchant = 0, is_gmove = 0, num_gmove = 0;
     time(&now);
+    LAST_FOOD_REFRESH = now;
     init_time(now);
     do {
+        usleep(DELAY);
         time(&now);
+        // refresh food
+        refresh_food(now);
+        // refresh speed
+        if (speed == 2 && difftime(now, speed_boost) > 5)
+            change_speed(1);
         for (int line = 0; line < 3; line++)
             if (refresh_message(now, line))
                 clean_area(create_point(line, 0), create_point(line, COLS - 1));
@@ -711,7 +779,7 @@ void play_game() {
                 print_message_with_color(2, 0, "You gained ", 8);
                 print_number_with_color(2, 11, user.gold[user.level][user.pos.x][user.pos.y].cnt, 8);
                 print_message_with_color(2, 13, "golds!", 8);
-                LAST_REFRESH[2] = now;
+                LAST_MESSAGE_REFRESH[2] = now;
             }
             user.map[user.level][user.pos.x][user.pos.y] = '.';
         }
@@ -720,16 +788,18 @@ void play_game() {
             if (user.bag.number_of_food == 5) {
                 clean_area(create_point(1, 0), create_point(1, COLS - 1));
                 print_message_with_color(1, 0, "Bag is full! Can not pick food!", 2);
-                LAST_REFRESH[1] = now;
+                LAST_MESSAGE_REFRESH[1] = now;
             }
             else {
-                if (user.theme[user.level][user.pos.x][user.pos.y] != 'n') {
+                char c = get_theme(user.theme[user.level], user.pos.x, user.pos.y);
+                if (c != 'n') {
                     clean_area(create_point(1, 0), create_point(1, COLS - 1));
                     print_message_with_color(1, 0, "Food has been added to your bag!", 3);
-                    LAST_REFRESH[1] = now;
-                    user.bag.food[user.bag.number_of_food] = user.map[user.level][user.pos.x][user.pos.y];
+                    LAST_MESSAGE_REFRESH[1] = now;
+                    user.bag.food[user.bag.number_of_food] = user.theme[user.level][user.pos.x][user.pos.y];
                     ++user.bag.number_of_food;
                 }
+                user.theme[user.level][user.pos.x][user.pos.y] = c;
                 user.map[user.level][user.pos.x][user.pos.y] = '.';
             }
         }
@@ -748,7 +818,7 @@ void play_game() {
             if (is_new_room(&user)) {
                 clean_area(create_point(0, 0), create_point(0, COLS - 1));
                 print_message_with_color(0, 0, "You have entered a new room", 2);
-                LAST_REFRESH[0] = now;
+                LAST_MESSAGE_REFRESH[0] = now;
             }
         }
         // change level
@@ -762,7 +832,7 @@ void play_game() {
                 clean_area(create_point(0, 0), create_point(0, COLS - 1));
                 print_message_with_color(0, 0, "You have entered a new floor. Floor level is ", 2);
                 print_number_with_color(0, 45, user.level + 1, 2);
-                LAST_REFRESH[0] = now;
+                LAST_MESSAGE_REFRESH[0] = now;
             }
             timeout(-1);
         }
