@@ -171,13 +171,14 @@ void load_user(struct User* user) {
     trim(line);
     for (int i = 0; i < strlen(line); i++) // food type
         user->bag.food[i] = line[i];
-    fgets(line, MAX_SIZE, fptr); // number of weapon in bag
+    for (int i = 0; i < 5; i++) { // weapons
+        fgets(line, MAX_SIZE, fptr);
+        trim(line);
+        user->bag.weapon[i] = get_num(line);
+    }
+    fgets(line, MAX_SIZE, fptr); // current weapon
     trim(line);
-    user->bag.number_of_weapon = get_num(line);
-    fgets(line, MAX_SIZE, fptr); // weapon type
-    trim(line);
-    for (int i = 0; i < strlen(line); i++)
-        user->bag.weapon[i] = line[i];
+    user->cur_weapon = get_num(line);
     fgets(line, MAX_SIZE, fptr); // health potion
     trim(line);
     user->bag.health_potion = get_num(line);
@@ -248,11 +249,22 @@ void load_user(struct User* user) {
                 }
             }
     for (int level = 0; level < user->number_of_floor; level++)
-        for (int i = 0; i < GAME_X; i++) { // theme
-            fgets(line, MAX_SIZE, fptr);
-            for (int j = 0; j < GAME_Y; j++)
-                user->theme[level][i][j] = line[j];
-        }
+        for (int i = 0; i < GAME_X; i++) // theme
+            for (int j = 0; j < GAME_Y; j++) {
+                fgets(line, MAX_SIZE, fptr);
+                trim(line);
+                user->theme[level][i][j] = get_num(line);
+            }
+    for (int level = 0; level < user->number_of_floor; level++) // enemy
+        for (int i = 0; i < GAME_X; i++)
+            for (int j = 0; j < GAME_Y; j++) {
+                fgets(line, MAX_SIZE, fptr);
+                trim(line);
+                char *token = strtok(line, " ");
+                user->enemy[level][i][j].health = get_num(token);
+                token = strtok(NULL, " ");
+                user->enemy[level][i][j].moves = get_num(token); 
+            }
     fclose(fptr);
 }
 
@@ -286,10 +298,9 @@ void update_user(struct User* user) {
     for (int i = 0; i < user->bag.number_of_food; i++)
         fprintf(fptr, "%c", user->bag.food[i]);
     fprintf(fptr, "\n");
-    fprintf(fptr, "%d\n", user->bag.number_of_weapon);
-    for (int i = 0; i < user->bag.number_of_weapon; i++)
-        fprintf(fptr, "%c", user->bag.weapon[i]);
-    fprintf(fptr, "\n");
+    for (int i = 0; i < 5; i++)
+        fprintf(fptr, "%d\n", user->bag.weapon[i]);
+    fprintf(fptr, "%d\n", user->cur_weapon);
     fprintf(fptr, "%d\n", user->bag.health_potion);
     fprintf(fptr, "%d\n", user->bag.speed_potion);
     fprintf(fptr, "%d\n", user->bag.damage_potion);
@@ -329,11 +340,13 @@ void update_user(struct User* user) {
             }
     
     for (int level = 0; level < user->number_of_floor; level++) // theme
-        for (int i = 0; i < GAME_X; i++) {
+        for (int i = 0; i < GAME_X; i++)
             for (int j = 0; j < GAME_Y; j++)
-                fprintf(fptr, "%c", user->theme[level][i][j]);
-            fprintf(fptr, "\n");
-        }
+                fprintf(fptr, "%d\n", user->theme[level][i][j]);
+    for (int level = 0; level < user->number_of_floor; level++) // enemy
+        for (int i = 0; i < GAME_X; i++)
+            for (int j = 0; j < GAME_Y; j++)
+                fprintf(fptr, "%d %d\n", user->enemy[level][i][j].health, user->enemy[level][i][j].moves);
     fclose(fptr);
 }
 

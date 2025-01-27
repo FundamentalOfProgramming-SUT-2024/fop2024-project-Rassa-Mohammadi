@@ -311,17 +311,18 @@ void generate_food(struct User* user, char ***map, struct Room* room, int level)
     }
 }
 
-void generate_weapon(char ***map, struct Room* room) {
+void generate_weapon(struct User *user, char ***map, struct Room* room, int level) {
     if (room->type == 't' || room->type == 'e')
         return;
-    char tmp[] = {'m', 'd', 'M', 'n', 's'}; // mace, dagger, magic wand, normal arrow, sword
+    int cnt[] = {1, 10, 8, 20, 1};
     for (int i = 0; i < 5; i++) {
         if (rand() % 5 == 0) {
             while (true) {
                 int x = room->p.x + 1 + rand() % room->height;
                 int y = room->p.y + 1 + rand() % room->width;
                 if ((*map)[x][y] == '.') {
-                    (*map)[x][y] = tmp[i];
+                    (*map)[x][y] = wEAPON[i];
+                    user->theme[level][x][y] = cnt[i];
                     break;
                 }
             }
@@ -339,13 +340,13 @@ void generate_potion(char ***map, struct Room* room) {
                 int type = rand() % 3;
                 switch(type) {
                     case 0: // health
-                        (*map)[x][y] = 'H';
+                        (*map)[x][y] = 'h';
                         break;
                     case 1: // speed
-                        (*map)[x][y] = 'S';
+                        (*map)[x][y] = 's';
                         break;
                     case 2: // damage
-                        (*map)[x][y] = 'D';
+                        (*map)[x][y] = 'd';
                         break;
                 }
                 --number_of_potion;
@@ -361,17 +362,35 @@ void generate_potion(char ***map, struct Room* room) {
                     int type = rand() % 3;
                     switch(type) {
                         case 0: // health
-                            (*map)[x][y] = 'H';
+                            (*map)[x][y] = 'h';
                             break;
                         case 1: // speed
-                            (*map)[x][y] = 'S';
+                            (*map)[x][y] = 's';
                             break;
                         case 2: // damage
-                            (*map)[x][y] = 'D';
+                            (*map)[x][y] = 'd';
                             break;
                     }
                 }
                 break;
+            }
+        }
+    }
+}
+
+void generate_enemy(struct User* user, struct Room* room, int level) {
+    if (room->type == 't')
+        return;
+    char enemy_name[] = {'D', 'F', 'G', 'S', 'U'};
+    for (int i = 0; i < 5; i++) {
+        if (rand() % (3 - DIFFICULTY + 2 * i) == 0) {
+            while (true) {
+                int x = room->p.x + 1 + rand() % room->height;
+                int y = room->p.y + 1 + rand() % room->width;
+                if (user->map[level][x][y] == '.') {
+                    user->map[level][x][y] = enemy_name[i];
+                    break;
+                }
             }
         }
     }
@@ -382,14 +401,15 @@ void add_items(struct User* user, char ***map, struct Room* room, int level) { /
     generate_traps(user, room, level);
     generate_gold(user, map, room, level);
     generate_food(user, map, room, level);
-    generate_weapon(map, room);
+    generate_weapon(user, map, room, level);
     generate_potion(map, room);
+    generate_enemy(user, room, level);
     create_secret_doors(user, map, room, level);
 }
 
 void generate_map(struct User* user) {
     clear();
-    print_message_with_color(LINES / 3, COLS / 3 - 10, "It may take up to 60 seconds. Thank you for your patience.", 3);
+    print_message_with_color(LINES / 3, COLS / 3 - 10, "It may take up to 90 seconds. Thank you for your patience.", 3);
     refresh();
     time_t st;
     time(&st);
@@ -407,7 +427,7 @@ void generate_map(struct User* user) {
         do {
             time_t now;
             time(&now);
-            if (difftime(now, st) > 60) {
+            if (difftime(now, st) > 90) {
                 clear();
                 print_message_with_color(LINES / 3, COLS / 3, "Failed to generate map!", 2);
                 print_message_with_color(LINES / 3 + 2, COLS / 3, "Press any key to regenerate ...", 3);
@@ -448,12 +468,12 @@ void generate_map(struct User* user) {
             int index = rand() % number_of_rooms;
             rooms[index].type = 't';
         }
+        if (level != user->number_of_floor - 1)
+            generate_staircase(map, &staircaise);
         for (int i = 0; i < number_of_rooms; i++) {
             update_theme(user, level, &rooms[i]);
             add_items(user, map, &rooms[i], level);
         }
-        if (level != user->number_of_floor - 1)
-            generate_staircase(map, &staircaise);
         if (level == 0)
             determine_initial_position(user, map);
         // determine_doors_type(user, map);
@@ -464,7 +484,7 @@ void print_map(struct User* user, int reveal) {
     print_message_with_color(LINES - 1, 0, "Press (Q) to exit game.", 2);
     for (int i = 0; i < GAME_X; i++)
         for (int j = 0; j < GAME_Y; j++) {
-            char c = user->theme[user->level][i][j];
+            int c = user->theme[user->level][i][j];
             int color;
             switch (c) {
             case 'r':
@@ -479,7 +499,7 @@ void print_map(struct User* user, int reveal) {
             case 't':
                 color = 7;
                 break;
-            case 1:
+            case 1: // food type
                 color = 3;
                 break;
             case 2:
@@ -510,7 +530,7 @@ void print_map(struct User* user, int reveal) {
                     if (c == 'm') {
                         print_message_with_color(i + ST_X, j + ST_Y, "⚒", 6);
                     }
-                    else if (c == 'd') {
+                    else if (c == 'a') {
                         print_message_with_color(i + ST_X, j + ST_Y, "🗡", 6);
                     }
                     else if (c ==  'M') {
@@ -522,6 +542,9 @@ void print_map(struct User* user, int reveal) {
                     else {
                         print_message_with_color(i + ST_X, j + ST_Y, "⚔", 6);
                     }
+                }
+                else if (is_enemy((user->map[user->level][i][j]))) {
+                    print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], 2);
                 }
                 else if (is_potion((user->map)[user->level][i][j])) {
                     print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], 4);

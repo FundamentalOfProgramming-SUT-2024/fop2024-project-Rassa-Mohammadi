@@ -42,14 +42,17 @@ struct Room {
 struct Bag {
     int number_of_food;
     char food[5];
-    int number_of_weapon;
-    char weapon[5];
+    int weapon[5];
     // potions
     int health_potion;
     int speed_potion;
     int damage_potion;
 };
 
+struct Enemy {
+    int health;
+    int moves;
+};
 
 struct User {
     char username[MAX_SIZE];
@@ -61,9 +64,10 @@ struct User {
     int level;
     char **map[5];
     int mask[5][MAX_SIZE][MAX_SIZE];
-    char theme[5][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare | 1: normal 2: aala 3: jadoee 4: fased
+    int theme[5][MAX_SIZE][MAX_SIZE]; // r: regular, t: treasure, e: enchant, n: nightmare | 1: normal 2: aala 3: jadoee 4: fased
     struct Point pos;
     struct Bag bag;
+    int cur_weapon;
     int score;
     int golds;
     int health;
@@ -71,6 +75,7 @@ struct User {
     struct Gold gold[5][MAX_SIZE][MAX_SIZE];
     struct Door door[5][MAX_SIZE][MAX_SIZE];
     struct Trap trap[5][MAX_SIZE][MAX_SIZE];
+    struct Enemy enemy[5][MAX_SIZE][MAX_SIZE];
 };
 
 struct miniUser {
@@ -81,8 +86,9 @@ struct miniUser {
     int score;
 };
 
-time_t LAST_MESSAGE_REFRESH[3], LAST_EAT, LAST_FOOD_REFRESH;
-int USERS, DELAY = 40000;
+time_t LAST_MESSAGE_REFRESH[3], LAST_EAT, LAST_FOOD_REFRESH, LAST_RECOVERY;
+int USERS;
+int DELAY = 40000, RECOVERY = 2, POWER = 1;
 int DIFFICULTY = 0; // 0: Easy, 1: Medium, 2: HARD
 int GAME_X = 30, GAME_Y = 120;
 int ST_X = 3, ST_Y = 4;
@@ -91,12 +97,18 @@ int D_X[] = {-1, 0, 1, 0, -1, -1, 1, 1};
 int D_Y[] = {0, 1, 0, -1, -1, 1, 1, -1}; 
 int number_of_rooms;
 struct Point* corners;
+char WEAPON[][20] = {"Mace", "Dagger", "Magic Wand", "Normal Arrow", "Sword"};
+char wEAPON[] = {'m', 'g', 'M', 'n', 'o'};
 
 struct Point create_point(int x, int y) {
     struct Point p;
     p.x = x;
     p.y = y;
     return p;
+}
+
+int are_equal(struct Point p1, struct Point p2) {
+    return p1.x == p2.x && p1.y == p2.y;
 }
 
 void change_color(int color) {
@@ -136,7 +148,10 @@ void init_user(struct User* user, int level) {
             (user->mask)[level][i][j] = 0;
     // user->golds = 0;
     user->bag.number_of_food = 0;
-    user->bag.number_of_weapon = 0;
+    user->bag.weapon[0] = 1;
+    for (int i = 1; i < 5; i++)
+        user->bag.weapon[i] = 0;
+    user->cur_weapon = 0;
     user->bag.speed_potion = user->bag.health_potion = user->bag.damage_potion = 0;
     user->health = 10;
     user->hunger = 10;
@@ -203,16 +218,24 @@ int is_food(struct User* user) {
     return user->map[user->level][user->pos.x][user->pos.y] == 'f';
 }
 
+int is_wall(char c) {
+    return c == '|' || c == '_';
+}
+
 int is_weapon(char c) {
-    return c == 'm' || c == 'd' || c == 'M' || c == 'n' || c == 's';
+    return c == 'm' || c == 'g' || c == 'M' || c == 'n' || c == 'o'; // mace dagger Magic arrow sword
 }
 
 int is_potion(char c) {
-    return c == 'H' || c == 'S' || c == 'D'; 
+    return c == 'h' || c == 's' || c == 'd'; 
+}
+
+int is_enemy(char c) {
+    return c == 'D' || c == 'F' || c == 'G' || c == 'S' || c == 'U';
 }
 
 int is_in_room(char ***map, struct Point p) {
-    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f' || is_weapon((*map)[p.x][p.y]) || is_potion((*map)[p.x][p.y]);
+    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f' || is_weapon((*map)[p.x][p.y]) || is_potion((*map)[p.x][p.y]) || is_enemy((*map)[p.x][p.y]);
 }
 
 int is_new_room(struct User* user) {
@@ -250,7 +273,31 @@ int get_dir(int key) {
     return -1;
 }
 
-char get_theme(char theme[MAX_SIZE][MAX_SIZE], int x, int y) {
+int best_dir(char ***map, struct Point p1, struct Point p2) {
+    if (p1.x < p2.x && !are_equal(create_point(p1.x + 1, p1.y), p2)) { // down
+        struct Point nxt = next_point(p1, 2);
+        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+            return 2;
+    }
+    if (p1.x > p2.x && !are_equal(create_point(p1.x - 1, p1.y), p2)) { // up
+        struct Point nxt = next_point(p1, 0);
+        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+            return 0;
+    }
+    if (p1.y < p2.y && !are_equal(create_point(p1.x, p1.y + 1), p2)) { // right
+        struct Point nxt = next_point(p1, 1);
+        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+            return 1;
+    }
+    if (p1.y > p2.y && !are_equal(create_point(p1.x, p1.y - 1), p2)) { // left
+        struct Point nxt = next_point(p1, 3);
+        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+            return 3;
+    }
+    return -1;
+}
+
+int get_theme(int theme[MAX_SIZE][MAX_SIZE], int x, int y) {
     for (int dir = 0; dir < 8; dir++) {
         int n_x = x + D_X[dir];
         int n_y = y + D_Y[dir];
@@ -258,6 +305,45 @@ char get_theme(char theme[MAX_SIZE][MAX_SIZE], int x, int y) {
             return theme[n_x][n_y];
     }
     return 'r';
+}
+
+int get_range(int id) {
+    if (id == 0)
+        return 1;
+    else if (id == 1)
+        return 5;
+    else if (id == 2)
+        return 10;
+    else if (id == 3)
+        return 5;
+    else
+        return 1;
+}
+
+int get_enemy_health(char c) {
+    if (c == 'D')
+        return 5;
+    else if (c == 'F')
+        return 10;
+    else if (c == 'G')
+        return 15;
+    else if (c == 'S')
+        return 20;
+    else if (c == 'U')
+        return 30;
+}
+
+int get_enemy_moves(char c) {
+    if (c == 'D')
+        return 0;
+    else if (c == 'F')
+        return 0;
+    else if (c == 'G')
+        return 5;
+    else if (c == 'S')
+        return 1000; // unlimited
+    else if (c == 'U')
+        return 5;
 }
 
 int check_corners(char ***map) {
@@ -330,6 +416,8 @@ void init_time(time_t t) {
     for (int line = 0; line < 3; line++)
         LAST_MESSAGE_REFRESH[line] = t;
     LAST_EAT = t;
+    LAST_FOOD_REFRESH = t;
+    LAST_RECOVERY = t;
 }
 
 int refresh_message(time_t t, int line) {
@@ -347,9 +435,48 @@ void reduce_hunger(struct User* user) {
         --user->health;
 }
 
-void check_food(struct User* user, time_t t) {
+void check_hunger(struct User* user, time_t t) {
     if (difftime(t, LAST_EAT) > 5 + (2 - DIFFICULTY)) {
         reduce_hunger(user);
         LAST_EAT = t;
     }
+}
+
+void refresh_food(struct User* user, time_t now) {
+    if (difftime(now, LAST_FOOD_REFRESH) > 30 - 5 * DIFFICULTY) {
+        for (int i = 0; i < user->bag.number_of_food; i++) {
+            if (user->bag.food[i] == 1)
+                user->bag.food[i] = 4;
+            else if (user->bag.food[i] == 2 || user->bag.food[i] == 3)
+                user->bag.food[i] = 1;
+        }
+        LAST_FOOD_REFRESH = now;
+    }
+}
+
+void recover_health(struct User* user, time_t now) {
+    if (user->hunger != 10)
+        return;
+    if (difftime(now, LAST_RECOVERY) > RECOVERY) {
+        user->health++;
+        if (user->health > 10)
+            user->health = 10;
+        LAST_RECOVERY = now;
+    }
+}
+
+char guess_char(char ***map, struct Point p) {
+    struct Point nxt1, nxt2;
+    nxt1 = next_point(p, 0), nxt2 = next_point(p, 2);
+    if (is_wall((*map)[nxt1.x][nxt1.y]) && is_wall((*map)[nxt2.x][nxt2.y]))
+        return '+';
+    nxt1 = next_point(p, 1), nxt2 = next_point(p, 3);
+    if (is_wall((*map)[nxt1.x][nxt1.y]) && is_wall((*map)[nxt2.x][nxt2.y]))
+        return '+';
+    for (int dir = 0; dir < 4; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if ((*map)[nxt.x][nxt.y] == '#')
+            return '#';
+    }
+    return '.';
 }

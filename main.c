@@ -5,6 +5,7 @@
 #include "designer.h"
 #include "file_processor.h"
 
+void init_mark();
 void set_colors();
 void create_game_menu();
 void create_login_page();
@@ -24,20 +25,22 @@ void appear_nightmare(struct Point, int);
 void appear_trap_secret();
 void disappear_nightmare(struct Point, int);
 void hunger_menu();
-void consume_food(int);
+void consume_food(int, time_t);
 void add_weapon(char);
 void add_potion(char);
 void weapon_menu();
 void potion_menu();
-void change_speed(int);
-void refresh_food(time_t);
+void attack(char***);
+void change_weapon(int, time_t);
+void init_enemy(struct Point);
 int check_health();
 void quit_game();
 
 struct User user;
 int is_guest, reveal, speed = 1;
 int hero_color = 1;
-time_t speed_boost;
+int speed_boost, health_boost, power_boost;
+int mark[MAX_SIZE][MAX_SIZE];
 
 int main() {
     setlocale(LC_ALL, "");
@@ -48,6 +51,12 @@ int main() {
     create_game_menu();
     play_game();
     quit_game();
+}
+
+void init_mark() {
+    for (int i = 0; i < GAME_X; i++)
+        for (int j = 0; j < GAME_Y; j++)
+            mark[i][j] = 0;
 }
 
 void set_colors() {
@@ -426,15 +435,6 @@ void pregame_menu() {
     }
 }
 
-void change_speed(int state) {
-    if (state == 2) {
-        speed = 2;
-        time(&speed_boost);
-    }
-    else
-        speed = 1;
-}
-
 void hunger_menu() {
     clear();
     timeout(-1);
@@ -458,20 +458,24 @@ void hunger_menu() {
     int choice = create_list(create_point(x + 3, y), options, user.bag.number_of_food, 3);
     if (!user.bag.number_of_food)
         return;
+    time_t now;
+    time(&now);
     switch (user.bag.food[choice]) {
         case 1:
-            consume_food(3);
+            consume_food(3, now);
             break;
         case 4:
-            consume_food(-1);
+            consume_food(-1, now);
             break;
         case 2:
-            consume_food(3);
-            // add strength
+            consume_food(3, now);
+            power_boost = 5;
+            POWER = 2;
             break;
         case 3:
-            consume_food(3);
-            change_speed(2);
+            consume_food(3, now);
+            speed_boost = 5;
+            speed = 2;
         default:
             break;
     }
@@ -481,46 +485,94 @@ void hunger_menu() {
     timeout(0);
 }
 
-void consume_food(int x) {
-    if (10 - user.hunger >= x)
-        user.hunger += x;
+void attack(char ***map) {
+    if (user.cur_weapon != 0 && user.cur_weapon != 4) {
+        timeout(-1);
+        int key = getch();
+        int dir = get_dir(key);
+        int dist = get_range(user.cur_weapon);
+        struct Point cur = user.pos;
+        struct Point nxt = next_point(cur, dir);
+        while (not_restricted(&user, map, nxt) && dist > 0) {
+            --dist;
+            cur = nxt;
+            nxt = next_point(cur, dir);
+        }
+        (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
+        user.theme[user.level][cur.x][cur.y] = 1;
+        // damage(cur);
+        timeout(0);
+    }
     else {
-        x -= 10 - user.hunger;
-        user.hunger = 10;
-        user.health += x;
-        if (user.health > 10)
-            user.health = 10;
+        for (int dir = 0; dir < 8; dir++) {
+            struct Point nxt = next_point(user.pos, dir);
+            // damage(nxt);
+        }
     }
 }
 
-void refresh_food(time_t now) {
-    if (difftime(now, LAST_FOOD_REFRESH) > 20 - 5 * DIFFICULTY) {
-        for (int i = 0; i < user.bag.number_of_food; i++) {
-            if (user.bag.food[i] == 1)
-                user.bag.food[i] = 4;
-            else if (user.bag.food[i] == 2 || user.bag.food[i] == 3)
-                user.bag.food[i] = 1;
-        }
-        LAST_FOOD_REFRESH = now;
+void consume_food(int x, time_t now) {
+    user.hunger += x;
+    if (user.hunger >= 10) {
+        user.hunger = 10;
+        LAST_RECOVERY = now;
     }
+    if (user.hunger < 0) {
+        user.health += user.hunger;
+        user.hunger = 0;
+    }
+    LAST_EAT = now;
 }
 
 void add_weapon(char type) {
-    if (user.bag.number_of_weapon == 5)
+    switch (type) {
+        case 'm':
+            user.bag.weapon[0] += user.theme[user.level][user.pos.x][user.pos.y];
+            break;
+        case 'a':
+            user.bag.weapon[1] += user.theme[user.level][user.pos.x][user.pos.y];
+            break;
+        case 'M':
+            user.bag.weapon[2] += user.theme[user.level][user.pos.x][user.pos.y];
+            break;
+        case 'n':
+            user.bag.weapon[3] += user.theme[user.level][user.pos.x][user.pos.y];
+            break;
+        case 'o':
+            user.bag.weapon[4] += user.theme[user.level][user.pos.x][user.pos.y];
+            break;
+    }
+}
+
+void change_weapon(int id, time_t now) {
+    if (user.cur_weapon != -1) {
+        clean_area(create_point(0, 0), create_point(0, COLS - 1));
+        print_message_with_color(0, 0, "First, put your current weapon in the backpack", 2);
+        LAST_MESSAGE_REFRESH[0] = now;
         return;
-    user.bag.weapon[user.bag.number_of_weapon] = type;
-    ++user.bag.number_of_weapon;
+    }
+    if (user.bag.weapon[id] == 0) {
+        clean_area(create_point(0, 0), create_point(0, COLS - 1));
+        print_message_with_color(0, 0, "This weapon is not available in your backpack", 2);
+        LAST_MESSAGE_REFRESH[0] = now;
+        return;
+    }
+    user.cur_weapon = id;
+    clean_area(create_point(0, 0), create_point(0, COLS - 1));
+    print_message_with_color(0, 0, "Your current weapon is now: ", 2);
+    print_message_with_color(0, 29, WEAPON[id], 2);
+    LAST_MESSAGE_REFRESH[0] = now;
 }
 
 void add_potion(char type) {
     switch(type) {
-        case 'H':
+        case 'h':
             ++user.bag.health_potion;
             break;
-        case 'S':
+        case 's':
             ++user.bag.speed_potion;
             break;
-        case 'D':
+        case 'd':
             ++user.bag.damage_potion;
             break;
     }
@@ -531,22 +583,50 @@ void weapon_menu() {
     timeout(-1);
     curs_set(FALSE);
     int x = LINES / 3 - 2, y = COLS / 3;
-    print_message_with_color(x + 1, y - 10, "The following weapons are available in your bag. choose one:", 2);
-    char *options[user.bag.number_of_weapon];
-    for (int i = 0; i < user.bag.number_of_weapon; i++) {
-        options[i] = malloc(sizeof(char) * 20);
-        if (user.bag.weapon[i] == 'm')
-            strcpy(options[i], "Mace");
-        else if (user.bag.weapon[i] == 'd')
-            strcpy(options[i], "Dagger");
-        else if (user.bag.weapon[i] == 'M')
-            strcpy(options[i], "Magic Wand");
-        else if (user.bag.weapon[i] == 'n')
-            strcpy(options[i], "Normal Arrow");
-        else
-            strcpy(options[i], "Sword");
+    print_message_with_color(1, 0, "Choose your weapon to fight!", 2);
+    // Titles
+    // Name, type, range, availabe quantity, damage
+    print_message_with_color(ST_X, ST_Y, "Name", 4);
+    print_message_with_color(ST_X, ST_Y + 15, "Type", 4);
+    print_message_with_color(ST_X, ST_Y + 30, "Range", 4);
+    print_message_with_color(ST_X, ST_Y + 40, "Availabe quantity", 4);
+    print_message_with_color(ST_X, ST_Y + 60, "Damage", 4);
+    print_message_with_color(ST_X, ST_Y + 70, "Symbol", 4);
+    char name[][20] = {"Mace", "Dagger", "Magic Wand", "Normal Arrow", "Sword"};
+    char type[][20] = {"Short-Range", "Long-Range", "Long-Range", "Long-Range", "Short-Range"};
+    int range[] = {1, 5, 10, 5, 1};
+    int damage[] = {5, 12, 15, 5, 10};
+    char symbol[][20] = {"⚒", "🗡", "M", "➳", "⚔"};
+    int key = -1, choice = 0;
+    do {
+        if (key == KEY_UP && choice > 0)
+            --choice;
+        if (key == KEY_DOWN && choice < 4)
+            ++choice;
+        for (int i = 0; i < 5; i++) {
+            if (choice == i)
+                attron(A_REVERSE | A_BOLD);
+            int color = 7;
+            if (i == 0 || i == 4)
+                color = 6;
+            print_message_with_color(ST_X + 2 * i + 2, ST_Y, name[i], color);
+            print_message_with_color(ST_X + 2 * i + 2, ST_Y + 15, type[i], color);
+            print_number_with_color(ST_X + 2 * i + 2, ST_Y + 32, range[i], color);
+            print_number_with_color(ST_X + 2 * i + 2, ST_Y + 45, user.bag.weapon[i], color);
+            print_number_with_color(ST_X + 2 * i + 2, ST_Y + 62, damage[i], color);
+            print_message_with_color(ST_X + 2 * i + 2, ST_Y + 72, symbol[i], color);
+            if (choice == i)
+                attroff(A_REVERSE | A_BOLD);
+        }
+        refresh();
+        key = getch();
+    } while (key != '\n');
+    if (user.bag.weapon[choice] == 0) {
+        print_message_with_color(0, 0, "This weapon is not available in your bag!", 2);
+        LAST_MESSAGE_REFRESH[0] = time(NULL);
     }
-    int choice = create_list(create_point(x + 3, y), options, user.bag.number_of_weapon, 6);
+    else
+        user.cur_weapon = choice;
     timeout(0);
 }
 
@@ -572,6 +652,39 @@ void potion_menu() {
     strcat(options[2], ")");
 
     int choice = create_list(create_point(x + 3, y), options, 3, 5);
+
+    time_t now;
+    time(&now);    
+    if (choice == 0) {
+        if (user.bag.health_potion == 0) {
+            clean_area(create_point(0, 0), create_point(0, COLS - 1));
+            print_message_with_color(0, 0, "There is no health potion in your bag!", 2);
+            LAST_MESSAGE_REFRESH[0] = now;
+        }
+        health_boost = 10;
+        RECOVERY = 1;
+        --user.bag.health_potion;
+    }
+    else if (choice == 1) {
+        if (user.bag.speed_potion == 0) {
+            clean_area(create_point(0, 0), create_point(0, COLS - 1));
+            print_message_with_color(0, 0, "There is no speed potion in your bag!", 2);
+            LAST_MESSAGE_REFRESH[0] = now;
+        }
+        speed_boost = 10;
+        speed = 2;
+        --user.bag.speed_potion;
+    }
+    else {
+        if (user.bag.damage_potion == 0) {
+            clean_area(create_point(0, 0), create_point(0, COLS - 1));
+            print_message_with_color(0, 0, "There is no damage potion in your bag!", 2);
+            LAST_MESSAGE_REFRESH[0] = now;
+        }
+        power_boost = 10;
+        POWER = 2;
+        --user.bag.damage_potion;
+    }
     timeout(0);
 }
 
@@ -677,7 +790,8 @@ void appear_nightmare(struct Point p, int depth) {
         return;
     for (int dir = 0; dir < 8; dir++) {
         struct Point nxt = next_point(p, dir);
-        if (is_in_map(nxt) && user.theme[user.level][nxt.x][nxt.y] == 'n')
+        int c = get_theme(user.theme[user.level], user.pos.x, user.pos.y);
+        if (is_in_map(nxt) && c == 'n')
             appear_nightmare(nxt, depth - 1);
     }
 }
@@ -688,7 +802,8 @@ void disappear_nightmare(struct Point p, int depth) {
         return;
     for (int dir = 0; dir < 8; dir++) {
         struct Point nxt = next_point(p, dir);
-        if (is_in_map(nxt) && user.theme[user.level][nxt.x][nxt.y] == 'n')
+        int c = get_theme(user.theme[user.level], user.pos.x, user.pos.y);
+        if (is_in_map(nxt) && c == 'n')
             disappear_nightmare(nxt, depth - 1);
     }
 }
@@ -728,26 +843,79 @@ void reached_treasure_room() {
     quit_game();
 }
 
+void init_enemy(struct Point p) {
+    mark[p.x][p.y] = 1;
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (is_in_room(&user.map[user.level], nxt) && !mark[nxt.x][nxt.y]) {
+            if (is_enemy(user.map[user.level][nxt.x][nxt.y])) {
+                user.enemy[user.level][nxt.x][nxt.y].health = get_enemy_health(user.map[user.level][nxt.x][nxt.y]);
+                if (user.map[user.level][nxt.x][nxt.y] == 'S')
+                    user.enemy[user.level][nxt.x][nxt.y].moves = get_enemy_moves(user.map[user.level][nxt.x][nxt.y]);
+                else
+                    user.enemy[user.level][nxt.x][nxt.y].moves = -1;
+            }
+            init_enemy(nxt);
+        }
+    }
+}
+
+void trigger_enemy(struct Point p) {
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (is_in_room(&user.map[user.level], nxt) && is_enemy(user.map[user.level][nxt.x][nxt.y]) && user.enemy[user.level][nxt.x][nxt.y].moves == -1)
+            user.enemy[user.level][nxt.x][nxt.y].moves = get_enemy_moves(user.map[user.level][nxt.x][nxt.y]);
+    }
+}
+
+void move_enemy(struct Point p) {
+    mark[p.x][p.y] = 1;
+    if (is_enemy(user.map[user.level][p.x][p.y]) && user.enemy[user.level][p.x][p.y].moves > 0) {
+        int dir = best_dir(&user.map[user.level], p, user.pos);
+        if (dir != -1) {
+            struct Point nxt = next_point(p, dir);
+            user.enemy[user.level][nxt.x][nxt.y] = user.enemy[user.level][p.x][p.y];
+            --user.enemy[user.level][nxt.x][nxt.y].moves;
+            user.map[user.level][nxt.x][nxt.y] = user.map[user.level][p.x][p.y];
+            user.map[user.level][p.x][p.y] = '.';
+            mark[nxt.x][nxt.y] = 1;
+        }
+    }
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (is_in_room(&user.map[user.level], nxt) && !mark[nxt.x][nxt.y])
+            move_enemy(nxt);
+    }
+}
+
 void play_game() {
     clear();
     int key;
     time_t now, st_enchant;
     int is_in_enchant = 0, is_gmove = 0, num_gmove = 0;
     time(&now);
-    LAST_FOOD_REFRESH = now;
     init_time(now);
+    int cycle = 0;
     do {
+        cycle = (cycle + 1) % 20;
         usleep(DELAY);
         time(&now);
         // refresh food
-        refresh_food(now);
+        refresh_food(&user, now);
+        // recover health
+        recover_health(&user, now);
+        // refresh recovery
+        if (RECOVERY == 1 && health_boost <= 0)
+            RECOVERY = 2;
         // refresh speed
-        if (speed == 2 && difftime(now, speed_boost) > 5)
-            change_speed(1);
+        if (speed == 2 && speed_boost <= 0)
+            speed = 1;
+        // messages
         for (int line = 0; line < 3; line++)
             if (refresh_message(now, line))
                 clean_area(create_point(line, 0), create_point(line, COLS - 1));
-        check_food(&user, now);
+        // hunger
+        check_hunger(&user, now);
         timeout(0);
         // reduce health --> enchanted room
         if (user.theme[user.level][user.pos.x][user.pos.y] == 'e') {
@@ -805,13 +973,22 @@ void play_game() {
         }
         // weapon
         if (is_weapon(user.map[user.level][user.pos.x][user.pos.y]) && !is_gmove) {
+            char c = get_theme(user.theme[user.level], user.pos.x, user.pos.y);
             add_weapon(user.map[user.level][user.pos.x][user.pos.y]);
-            user.map[user.level][user.pos.x][user.pos.y] = '.';
+            user.map[user.level][user.pos.x][user.pos.y] = guess_char(&user.map[user.level], user.pos);
+            user.theme[user.level][user.pos.x][user.pos.y] = c;
         }
         // potion
         if (is_potion(user.map[user.level][user.pos.x][user.pos.y]) && !is_gmove) {
             add_potion(user.map[user.level][user.pos.x][user.pos.y]);
             user.map[user.level][user.pos.x][user.pos.y] = '.';
+        }
+        // trigger enemy
+        trigger_enemy(user.pos);
+        // move enemy
+        if (!cycle) {
+            init_mark();
+            move_enemy(user.pos);
         }
         // enter new room
         if (user.map[user.level][user.pos.x][user.pos.y] == '+' || user.map[user.level][user.pos.x][user.pos.y] == '_' || user.map[user.level][user.pos.x][user.pos.y] == '|') {
@@ -819,6 +996,8 @@ void play_game() {
                 clean_area(create_point(0, 0), create_point(0, COLS - 1));
                 print_message_with_color(0, 0, "You have entered a new room", 2);
                 LAST_MESSAGE_REFRESH[0] = now;
+                init_mark();
+                init_enemy(user.pos);
             }
         }
         // change level
@@ -847,19 +1026,23 @@ void play_game() {
         if (user.theme[user.level][user.pos.x][user.pos.y] == 'n')
             disappear_nightmare(user.pos, 2);
         key = getch();
+        int has_moved = move_player(key, &(user.map[user.level]));
+        if (has_moved > 0) {
+            --speed_boost;
+            --health_boost;
+            --power_boost;
+        }
         if (is_gmove) {
-            num_gmove += move_player(key, &(user.map[user.level]));
+            num_gmove += has_moved;
             if (num_gmove == 2) {
                 num_gmove = 0;
                 is_gmove = 0;
             }
         }
-        else
-            move_player(key, &(user.map[user.level]));
         if (key == 'M')
             reveal = 1 - reveal;
         if (key == 'E')
-            hunger_menu();
+            hunger_menu(now);
         if (key == 'i')
             weapon_menu();
         if (key == 'p')
@@ -870,6 +1053,12 @@ void play_game() {
             is_gmove = 1;
         if (key == 's')
             appear_trap_secret();
+        if (key == 'w')
+            user.cur_weapon = -1;
+        if (key >= '1' && key <= '5')
+            change_weapon(key - '1', now);
+        if (key == ' ')
+            attack(&(user.map[user.level]));
     } while (key != 'Q');
     timeout(-1);
     update_user(&user);
