@@ -42,6 +42,7 @@ struct Room {
 struct Bag {
     int number_of_food;
     char food[5];
+    time_t production_date[5];
     int weapon[5];
     // potions
     int health_potion;
@@ -86,7 +87,7 @@ struct miniUser {
     int score;
 };
 
-time_t LAST_MESSAGE_REFRESH[3], LAST_EAT, LAST_FOOD_REFRESH, LAST_RECOVERY;
+time_t LAST_MESSAGE_REFRESH[3], LAST_EAT, LAST_RECOVERY;
 int USERS;
 int DELAY = 40000, RECOVERY = 2, POWER = 1;
 int DIFFICULTY = 0; // 0: Easy, 1: Medium, 2: HARD
@@ -94,11 +95,12 @@ int GAME_X = 30, GAME_Y = 120;
 int ST_X = 3, ST_Y = 4;
 // up, right, down, left, topleft, topright, bottomright, bottomleft
 int D_X[] = {-1, 0, 1, 0, -1, -1, 1, 1};
-int D_Y[] = {0, 1, 0, -1, -1, 1, 1, -1}; 
+int D_Y[] = {0, 1, 0, -1, -1, 1, 1, -1};
 int number_of_rooms;
 struct Point* corners;
 char WEAPON[][20] = {"Mace", "Dagger", "Magic Wand", "Normal Arrow", "Sword"};
 char wEAPON[] = {'m', 'g', 'M', 'n', 'o'};
+int DAMAGE[] = {5, 12, 15, 5, 10};
 
 struct Point create_point(int x, int y) {
     struct Point p;
@@ -109,6 +111,15 @@ struct Point create_point(int x, int y) {
 
 int are_equal(struct Point p1, struct Point p2) {
     return p1.x == p2.x && p1.y == p2.y;
+}
+
+int get_dist(struct Point p1, struct Point p2) {
+    int delta_x = p1.x - p2.x, delta_y = p1.y - p2.y;
+    if (delta_x < 0)
+        delta_x *= -1;
+    if (delta_y < 0)
+        delta_y *= -1;
+    return delta_x * delta_x + delta_y * delta_y;
 }
 
 void change_color(int color) {
@@ -144,8 +155,10 @@ void init_user(struct User* user, int level) {
     for (int i = 0; i < GAME_X; i++)
         (user->map)[level][i] = malloc(sizeof(char) * GAME_Y);
     for (int i = 0; i < GAME_X; i++)
-        for (int j = 0; j < GAME_Y; j++)
+        for (int j = 0; j < GAME_Y; j++) {
             (user->mask)[level][i][j] = 0;
+            (user->theme)[level][i][j] = 'r';
+        }
     // user->golds = 0;
     user->bag.number_of_food = 0;
     user->bag.weapon[0] = 1;
@@ -203,8 +216,12 @@ int is_in_map(struct Point p) {
     return p.x >= 0 && p.y >= 0 && p.x < GAME_X && p.y < GAME_Y;
 }
 
-int is_in_corridor(char ***map, struct Point p) {
-    return (*map)[p.x][p.y] == '+' || (*map)[p.x][p.y] == '#';
+int is_in_corridor(char c) {
+    return c == '+' || c == '#' || c == '?';
+}
+
+int is_door(char c) {
+    return c == '+' || c == '?';
 }
 
 int is_corner(struct Point p) {
@@ -274,30 +291,104 @@ int get_dir(int key) {
 }
 
 int best_dir(char ***map, struct Point p1, struct Point p2) {
-    if (p1.x < p2.x && !are_equal(create_point(p1.x + 1, p1.y), p2)) { // down
-        struct Point nxt = next_point(p1, 2);
-        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
-            return 2;
+    int rasta = rand() % 2; // 0: aval x baad y, 1: baraaks
+    if (rasta == 0) {
+        if (p1.x < p2.x && !are_equal(create_point(p1.x + 1, p1.y), p2)) { // down
+            struct Point nxt = next_point(p1, 2);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.x > p2.x && !are_equal(create_point(p1.x - 1, p1.y), p2)) { // up
+            struct Point nxt = next_point(p1, 0);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+        }
+        if (p1.y < p2.y && !are_equal(create_point(p1.x, p1.y + 1), p2)) { // right
+            struct Point nxt = next_point(p1, 1);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+        }
+        if (p1.y > p2.y && !are_equal(create_point(p1.x, p1.y - 1), p2)) { // left
+            struct Point nxt = next_point(p1, 3);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
+        if (p1.x == p2.x) {
+            struct Point nxt = next_point(p1, 0);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+            nxt = next_point(p1, 2);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.y == p2.y) {
+            struct Point nxt = next_point(p1, 1);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+            nxt = next_point(p1, 3);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
     }
-    if (p1.x > p2.x && !are_equal(create_point(p1.x - 1, p1.y), p2)) { // up
-        struct Point nxt = next_point(p1, 0);
-        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
-            return 0;
-    }
-    if (p1.y < p2.y && !are_equal(create_point(p1.x, p1.y + 1), p2)) { // right
-        struct Point nxt = next_point(p1, 1);
-        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
-            return 1;
-    }
-    if (p1.y > p2.y && !are_equal(create_point(p1.x, p1.y - 1), p2)) { // left
-        struct Point nxt = next_point(p1, 3);
-        if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
-            return 3;
+    else {
+        if (p1.y < p2.y && !are_equal(create_point(p1.x, p1.y + 1), p2)) { // right
+            struct Point nxt = next_point(p1, 1);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+        }
+        if (p1.y > p2.y && !are_equal(create_point(p1.x, p1.y - 1), p2)) { // left
+            struct Point nxt = next_point(p1, 3);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
+        if (p1.x < p2.x && !are_equal(create_point(p1.x + 1, p1.y), p2)) { // down
+            struct Point nxt = next_point(p1, 2);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.x > p2.x && !are_equal(create_point(p1.x - 1, p1.y), p2)) { // up
+            struct Point nxt = next_point(p1, 0);
+            if (is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+        }
+        if (p1.x == p2.x) {
+            struct Point nxt = next_point(p1, 0);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+            nxt = next_point(p1, 2);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.y == p2.y) {
+            struct Point nxt = next_point(p1, 1);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+            nxt = next_point(p1, 3);
+            if (!are_equal(nxt, p2) && is_in_room(map, nxt) && (*map)[nxt.x][nxt.y] != '<' && (*map)[nxt.x][nxt.y] != '>' && (*map)[nxt.x][nxt.y] != 'O' && (*map)[nxt.x][nxt.y] != '^' && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
     }
     return -1;
 }
 
-int get_theme(int theme[MAX_SIZE][MAX_SIZE], int x, int y) {
+int best_dir_snake(char ***map, struct Point p1, struct Point p2) {
+    int cur_dist = get_dist(p1, p2);
+    for (int dir = 4; dir < 8; dir++) {
+        struct Point new_p = next_point(p1, dir);
+        int new_dist = get_dist(new_p, p2);
+        if (new_dist < cur_dist && !are_equal(new_p, p2) && is_in_room(map, new_p) && (*map)[new_p.x][new_p.y] != '<' && (*map)[new_p.x][new_p.y] != '>' && (*map)[new_p.x][new_p.y] != 'O' && (*map)[new_p.x][new_p.y] != '^' && !is_enemy((*map)[new_p.x][new_p.y]))
+            return dir;
+    }
+    return best_dir(map, p1, p2);
+}
+
+int get_theme(char ***map, int theme[MAX_SIZE][MAX_SIZE], int x, int y) {
+    struct Point cur = create_point(x, y);
+    if (is_in_room(map, cur)) {
+        while ((*map)[cur.x][cur.y] != '_' && (*map)[cur.x][cur.y] != '|' && (*map)[cur.x][cur.y] != '+' && (*map)[cur.x][cur.y] != '?')
+            cur = next_point(cur, 0);
+        return theme[cur.x][cur.y];
+    }
     for (int dir = 0; dir < 8; dir++) {
         int n_x = x + D_X[dir];
         int n_y = y + D_Y[dir];
@@ -344,6 +435,19 @@ int get_enemy_moves(char c) {
         return 1000; // unlimited
     else if (c == 'U')
         return 5;
+}
+
+char* get_enemy_name(char c) {
+    if (c == 'D')
+        return "Deamon";
+    if (c == 'F')
+        return "Fire Breathing Monster";
+    if (c == 'G')
+        return "Giant";
+    if (c == 'S')
+        return "Snake";
+    if (c == 'U')
+        return "Undeed";
 }
 
 int check_corners(char ***map) {
@@ -412,16 +516,17 @@ char* get_time(time_t t) {
     return res;
 }
 
-void init_time(time_t t) {
+void init_time(struct User *user, time_t t) {
     for (int line = 0; line < 3; line++)
         LAST_MESSAGE_REFRESH[line] = t;
     LAST_EAT = t;
-    LAST_FOOD_REFRESH = t;
     LAST_RECOVERY = t;
+    for (int i = 0; i < user->bag.number_of_food; i++)
+        user->bag.production_date[i] = t;
 }
 
 int refresh_message(time_t t, int line) {
-    if (difftime(t, LAST_MESSAGE_REFRESH[line]) > 2) {
+    if (difftime(t, LAST_MESSAGE_REFRESH[line]) > 5) {
         LAST_MESSAGE_REFRESH[line] = t;
         return 1;
     }
@@ -443,14 +548,13 @@ void check_hunger(struct User* user, time_t t) {
 }
 
 void refresh_food(struct User* user, time_t now) {
-    if (difftime(now, LAST_FOOD_REFRESH) > 30 - 5 * DIFFICULTY) {
-        for (int i = 0; i < user->bag.number_of_food; i++) {
+    for (int i = 0; i < user->bag.number_of_food; i++) {
+        if (difftime(now, user->bag.production_date[i]) > 30 - 5 * DIFFICULTY) {
             if (user->bag.food[i] == 1)
                 user->bag.food[i] = 4;
             else if (user->bag.food[i] == 2 || user->bag.food[i] == 3)
                 user->bag.food[i] = 1;
         }
-        LAST_FOOD_REFRESH = now;
     }
 }
 
