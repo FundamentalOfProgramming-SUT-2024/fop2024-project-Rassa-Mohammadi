@@ -422,7 +422,7 @@ int get_enemy_moves(char c) {
     else if (c == 'S')
         return 1000; // unlimited
     else if (c == 'U')
-        return 5;
+        return 10;
 }
 
 char* get_enemy_name(char c) {
@@ -529,7 +529,7 @@ void reduce_hunger(struct User* user) {
 }
 
 void check_hunger(struct User* user, time_t t) {
-    if (difftime(t, LAST_EAT) > 5 + (2 - DIFFICULTY)) {
+    if (difftime(t, LAST_EAT) > 7 + (2 - DIFFICULTY)) {
         reduce_hunger(user);
         LAST_EAT = t;
     }
@@ -537,7 +537,7 @@ void check_hunger(struct User* user, time_t t) {
 
 void refresh_food(struct User* user, time_t now) {
     for (int i = 0; i < user->bag.number_of_food; i++) {
-        if (difftime(now, user->bag.production_date[i]) > 30 - 5 * DIFFICULTY) {
+        if (difftime(now, user->bag.production_date[i]) > 60 - 5 * DIFFICULTY) {
             if (user->bag.food[i] == 1)
                 user->bag.food[i] = 4;
             else if (user->bag.food[i] == 2 || user->bag.food[i] == 3)

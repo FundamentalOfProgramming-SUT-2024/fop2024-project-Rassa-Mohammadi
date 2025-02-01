@@ -131,7 +131,7 @@ void load_user(struct User* user) {
     char *path = get_address(user->username, ".txt", "users/");
     FILE *fptr = fopen(path, "r");
     char line[MAX_SIZE];
-    fgets(line, MAX_SIZE, fptr); // username;
+    fgets(line, MAX_SIZE, fptr); // username
     fgets(line, MAX_SIZE, fptr); // password
     trim(line);
     strcpy(user->password, line);

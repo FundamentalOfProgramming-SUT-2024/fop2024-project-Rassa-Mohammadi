@@ -350,7 +350,7 @@ void hero_color_menu() {
 
 void music_menu() {
     clear();
-    char *options[] = {"No Music (default)", "ann", "Angry_Birds"};
+    char *options[] = {"No Music (default)", "Plants_vs_Zombies", "Angry_Birds"};
     int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3, 1);
     init_music();
     if (choice == 0) {
@@ -1104,6 +1104,9 @@ void play_game() {
         // refresh speed
         if (speed == 2 && speed_boost <= 0)
             speed = 1;
+        // refresh power
+        if (POWER = 2 && power_boost <= 0)
+            POWER = 1;
         // messages
         for (int line = 0; line < 3; line++)
             if (refresh_message(now, line))
@@ -1117,7 +1120,7 @@ void play_game() {
                 is_in_enchant = 1;
                 st_enchant = now;
             }
-            else if (difftime(now, st_enchant) > (2 - DIFFICULTY) + 5) {
+            else if (difftime(now, st_enchant) > (2 - DIFFICULTY) + 4) {
                 st_enchant = now;
                 --user.health;
             }
@@ -1184,6 +1187,10 @@ void play_game() {
         trigger_enemy(user.pos);
         // move enemy
         if (cycle == 0) {
+            --speed_boost;
+            --health_boost;
+            --power_boost;
+
             init_mark();
             move_enemy(user.pos);
             enemy_attack(user.pos);
@@ -1242,11 +1249,11 @@ void play_game() {
             disappear_nightmare(user.pos, 2);
         key = getch();
         int has_moved = move_player(key, &(user.map[user.level]));
-        if (has_moved > 0) {
-            --speed_boost;
-            --health_boost;
-            --power_boost;
-        }
+        // if (has_moved > 0) {
+        //     --speed_boost;
+        //     --health_boost;
+        //     --power_boost;
+        // }
         if (is_gmove) {
             num_gmove += has_moved;
             if (num_gmove == 2) {
@@ -1300,8 +1307,9 @@ void game_over() {
     mvprintw(x + 1, y, "Press any key to return to game menu ...");
     refresh();
     getch();
-    is_guest = music_on = 0;
+    is_guest = 0;
     last_dir = -1;
+    reveal = 0;
     for (int level = 0; level < 4; level++)
         init_user(&user, level);
     create_game_menu();

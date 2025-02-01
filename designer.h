@@ -239,7 +239,7 @@ void generate_gold(struct User* user, char ***map, struct Room* room, int level)
         }
     }
     else if (room->type == 't') {
-        int number_of_golds = 15 - 3 * DIFFICULTY;
+        int number_of_golds = 20 - 3 * DIFFICULTY;
         for (int i = 0; i < number_of_golds; i++) {
             while (true) {
                 int x = room->p.x + 1 + rand() % room->height;
@@ -402,12 +402,17 @@ void generate_enemy(struct User* user, struct Room* room, int level) {
     char enemy_name[] = {'D', 'F', 'G', 'S', 'U'};
     if (room->type == 't') {
         for (int i = 0; i < 5; i++) {
-            while (true) {
+            int num;
+            if (i == 3)
+                num = 2 + rand() % 2;
+            else
+                num = 1 + rand() % 3;
+            while (num) {
                 int x = room->p.x + 1 + rand() % room->height;
                 int y = room->p.y + 1 + rand() % room->width;
                 if (user->map[level][x][y] == '.' && (user->pos.x != x || user->pos.y != y)) {
                     user->map[level][x][y] = enemy_name[i];
-                    break;
+                    --num;
                 }
             }
         }
@@ -517,7 +522,7 @@ void generate_map(struct User* user) {
             valid_map = 1;
             clear_map(map);
             for (int i = 0; i < number_of_rooms && valid_map; i++) {
-                int height = 4 + rand() % 3, width = 4 + rand() % 10;
+                int height = 4 + rand() % 3, width = 4 + rand() % 15;
                 int x = rand() % (GAME_X - height - 1), y = rand() % (GAME_Y - width - 1);
                 create_room(user, map, create_point(x, y), height, width, &rooms, i, level);
                 valid_map &= check_rooms_dist(&rooms, i);
@@ -652,6 +657,9 @@ void print_map(struct User* user, int reveal) {
                 }
                 else if ((user->map)[user->level][i][j] == 'T') {
                     print_message_with_color(i + ST_X, j + ST_Y, "🜚", 8);
+                }
+                else if (user->map[user->level][i][j] == '#') {
+                    print_message_with_color(i + ST_X, j + ST_Y, "#", 4);
                 }
                 else
                     print_character_with_color(i + ST_X, j + ST_Y, (user->map)[user->level][i][j], color);
