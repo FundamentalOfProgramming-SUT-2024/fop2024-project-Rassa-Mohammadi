@@ -1,4 +1,4 @@
-SDL_AudioDeviceID id;
+Mix_Music *id;
 
 char* get_address(char username[MAX_SIZE], char extension[], char directory[]) {
     char *res = malloc(MAX_SIZE * sizeof(char));
@@ -265,6 +265,13 @@ void load_user(struct User* user) {
                 token = strtok(NULL, " ");
                 user->enemy[level][i][j].moves = get_num(token); 
             }
+    for (int level = 0; level < user->number_of_floor; level++) // info
+        for (int i = 0; i < GAME_X; i++)
+            for (int j = 0; j < GAME_Y; j++) {
+                fgets(line, MAX_SIZE, fptr);
+                trim(line);
+                user->info[level][i][j] = get_num(line);
+            }
     fclose(fptr);
 }
 
@@ -347,6 +354,10 @@ void update_user(struct User* user) {
         for (int i = 0; i < GAME_X; i++)
             for (int j = 0; j < GAME_Y; j++)
                 fprintf(fptr, "%d %d\n", user->enemy[level][i][j].health, user->enemy[level][i][j].moves);
+    for (int level = 0; level < user->number_of_floor; level++) // info
+        for (int i = 0; i < GAME_X; i++)
+            for (int j = 0; j < GAME_Y; j++)
+                fprintf(fptr, "%d\n", user->info[level][i][j]);
     fclose(fptr);
 }
 
@@ -393,20 +404,23 @@ void get_users(struct miniUser*** user_list) {
     fclose(fptr);
 }
 
-void play_song(char song[MAX_SIZE]) {
-    char *path = get_address(song, ".wav", "songs/");
-    SDL_Init(SDL_INIT_AUDIO); // init
-    
-    SDL_AudioSpec wav_spec; // load
-    Uint8* wav_start;
-    Uint32 wav_length;
-    SDL_LoadWAV(path, &wav_spec, &wav_start, &wav_length);
+void init_music() {
+    id = NULL;
+    SDL_Init(SDL_INIT_AUDIO);
+    Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 4096);
+}
 
-    id = SDL_OpenAudioDevice(NULL, 0, &wav_spec, NULL, 0); // play
-    SDL_QueueAudio(id, wav_start, wav_length);
-    SDL_PauseAudioDevice(id, 0);
+void play_song(char genre[MAX_SIZE], char *name) {
+    char dir[MAX_SIZE] = "songs/";
+    strcat(dir, genre);
+    strcat(dir, "/");
+    char *path = get_address(name, ".mp3", dir);
+    id = Mix_LoadMUS(path);
+    Mix_PlayMusic(id, -1);
 }
 
 void terminate_music() {
-    SDL_PauseAudioDevice(id, 1);
+    Mix_HaltMusic();
+    Mix_FreeMusic(id);
+    id = NULL;
 }

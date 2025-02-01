@@ -43,6 +43,8 @@ int hero_color = 1;
 int speed_boost, health_boost, power_boost;
 int mark[MAX_SIZE][MAX_SIZE];
 int last_dir = -1;
+int music_on = 0;
+char genre[MAX_SIZE];
 
 int main() {
     setlocale(LC_ALL, "");
@@ -350,10 +352,16 @@ void music_menu() {
     clear();
     char *options[] = {"No Music (default)", "ann", "Angry_Birds"};
     int choice = create_list(create_point(LINES / 4, COLS / 3), options, 3, 1);
-    if (choice == 0)
+    init_music();
+    if (choice == 0) {
         terminate_music();
-    else
-        play_song(options[choice]);
+        music_on = 0;
+    }
+    else {
+        strcpy(genre, options[choice]);
+        play_song(options[choice], "main");
+        music_on = 1;
+    }
     go_to_settings();
 }
 
@@ -430,7 +438,7 @@ void pregame_menu() {
     char *options[] = {"Load previous game", "Create new game", "Scoreboard", "Settings", "Back"};
     int choice = create_list(create_point(LINES / 4, COLS / 3), options, 5, 1);
     if (choice == 0) { // load game
-        if (is_guest || !has_map(&user) || user.health <= 0 || get_theme(&user.map[user.level], user.theme[user.level], user.pos.x, user.pos.y) == 't') {
+        if (is_guest || !has_map(&user) || user.health <= 0 || user.theme[user.level][user.pos.x][user.pos.y] == 't') {
             clear();
             print_message_with_color(LINES / 3, COLS / 3, "There is no previous map for this account!", 2);
             print_message_with_color(LINES / 3 + 1, COLS / 3, "Press any key to return to the previous menu.", 2);
@@ -529,7 +537,7 @@ void hunger_menu() {
 
 int damage(char ***map, struct Point p) {
     if (is_enemy((*map)[p.x][p.y])) {
-        user.enemy[user.level][p.x][p.y].health -= DAMAGE[user.cur_weapon];
+        user.enemy[user.level][p.x][p.y].health -= DAMAGE[user.cur_weapon] * POWER;
         if (user.enemy[user.level][p.x][p.y].health <= 0)
             user.enemy[user.level][p.x][p.y].health = user.enemy[user.level][p.x][p.y].moves = 0;
         clean_area(create_point(1, 0), create_point(1, COLS - 1));
@@ -545,7 +553,6 @@ int damage(char ***map, struct Point p) {
             print_message_with_color(1, 16, get_enemy_name((*map)[p.x][p.y]), 2);
             LAST_MESSAGE_REFRESH[1] = time(NULL);
             (*map)[p.x][p.y] = '.';
-            user.theme[user.level][p.x][p.y] = get_theme(&user.map[user.level], user.theme[user.level], p.x, p.y);
         }
         return 1;
     }
@@ -579,7 +586,7 @@ void attack(char ***map, int is_a_attack) {
             print_message_with_color(0, 0, "You missed your shot!", 2);
             LAST_MESSAGE_REFRESH[0] = time(NULL);
             (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
-            user.theme[user.level][cur.x][cur.y] = 1;
+            user.info[user.level][cur.x][cur.y] = 1;
         }
     }
     else if (user.cur_weapon != -1) {
@@ -611,19 +618,19 @@ void consume_food(int x, time_t now) {
 void add_weapon(char type) {
     switch (type) {
         case 'm':
-            user.bag.weapon[0] += user.theme[user.level][user.pos.x][user.pos.y];
+            user.bag.weapon[0] += user.info[user.level][user.pos.x][user.pos.y];
             break;
         case 'a':
-            user.bag.weapon[1] += user.theme[user.level][user.pos.x][user.pos.y];
+            user.bag.weapon[1] += user.info[user.level][user.pos.x][user.pos.y];
             break;
         case 'M':
-            user.bag.weapon[2] += user.theme[user.level][user.pos.x][user.pos.y];
+            user.bag.weapon[2] += user.info[user.level][user.pos.x][user.pos.y];
             break;
         case 'n':
-            user.bag.weapon[3] += user.theme[user.level][user.pos.x][user.pos.y];
+            user.bag.weapon[3] += user.info[user.level][user.pos.x][user.pos.y];
             break;
         case 'o':
-            user.bag.weapon[4] += user.theme[user.level][user.pos.x][user.pos.y];
+            user.bag.weapon[4] += user.info[user.level][user.pos.x][user.pos.y];
             break;
     }
 }
@@ -877,21 +884,79 @@ void appear_nightmare(struct Point p, int depth) {
         return;
     for (int dir = 0; dir < 8; dir++) {
         struct Point nxt = next_point(p, dir);
-        int c = get_theme(&user.map[user.level], user.theme[user.level], user.pos.x, user.pos.y);
-        if ((is_in_room(&user.map[user.level], nxt) || is_wall(user.map[user.level][nxt.x][nxt.y]) || is_door(user.map[user.level][nxt.x][nxt.y])) && c == 'n')
+        if (!is_in_map(nxt))
+            continue;
+        int c = user.theme[user.level][user.pos.x][user.pos.y];
+        if ((is_in_room(&user.map[user.level], nxt) || is_wall(user.map[user.level][nxt.x][nxt.y]) || is_door(user.map[user.level][nxt.x][nxt.y]) || user.map[user.level][nxt.x][nxt.y] == '=') && c == 'n')
             appear_nightmare(nxt, depth - 1);
     }
 }
 
 void disappear_nightmare(struct Point p, int depth) {
-    user.mask[user.level][p.x][p.y] = 2;
+    user.mask[user.level][p.x][p.y] = 0;
     if (!depth)
         return;
     for (int dir = 0; dir < 8; dir++) {
         struct Point nxt = next_point(p, dir);
-        int c = get_theme(&user.map[user.level], user.theme[user.level], user.pos.x, user.pos.y);
-        if ((is_in_room(&user.map[user.level], nxt) || is_wall(user.map[user.level][nxt.x][nxt.y]) || is_door(user.map[user.level][nxt.x][nxt.y])) && c == 'n')
+        if (!is_in_map(nxt))
+            continue;
+        int c = user.theme[user.level][user.pos.x][user.pos.y];
+        if ((is_in_room(&user.map[user.level], nxt) || is_wall(user.map[user.level][nxt.x][nxt.y]) || is_door(user.map[user.level][nxt.x][nxt.y]) || user.map[user.level][nxt.x][nxt.y] == '=') && c == 'n')
             disappear_nightmare(nxt, depth - 1);
+    }
+}
+
+void appear_room(struct Point p) {
+    if (mark[p.x][p.y])
+        return;
+    mark[p.x][p.y] = 1;
+    ++user.mask[user.level][p.x][p.y];
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (mark[nxt.x][nxt.y])
+            continue;
+        if (is_in_room(&user.map[user.level], nxt))
+            appear_room(nxt);
+        else {
+            ++user.mask[user.level][nxt.x][nxt.y];
+            mark[nxt.x][nxt.y] = 1;
+        }
+    }
+}
+
+void disappear_room(struct Point p) {
+    if (mark[p.x][p.y])
+        return;
+    mark[p.x][p.y] = 1;
+    --user.mask[user.level][p.x][p.y];
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (mark[nxt.x][nxt.y])
+            continue;
+        if (is_in_room(&user.map[user.level], nxt))
+            disappear_room(nxt);
+        else {
+            mark[nxt.x][nxt.y] = 1;
+            --user.mask[user.level][nxt.x][nxt.y];
+        }
+    }
+}
+
+void appear_window(struct Point p, int dir) {
+    struct Point nxt = next_point(p, dir);
+    while (is_in_map(nxt)) {
+        if (is_in_room(&user.map[user.level], nxt))
+            appear_room(nxt);
+        nxt = next_point(nxt, dir);
+    }
+}
+
+void disappear_window(struct Point p, int dir) {
+    struct Point nxt = next_point(p, dir);
+    while (is_in_map(nxt)) {
+        if (is_in_room(&user.map[user.level], nxt))
+            disappear_room(nxt);
+        nxt = next_point(nxt, dir);
     }
 }
 
@@ -901,7 +966,6 @@ void play_trap(struct Point p) {
     int level = user.level;
     user.health -= user.trap[level][p.x][p.y].damage;
     user.map[level][p.x][p.y] = '^';
-    user.theme[level][p.x][p.y] = get_theme(&user.map[user.level], user.theme[level], p.x, p.y);
     print_status(&user);
     print_message_with_color(4, COLS / 3, "Press any key to return ...", 2);
     timeout(-1);
@@ -973,7 +1037,6 @@ void move_enemy(struct Point p) {
             --user.enemy[user.level][nxt.x][nxt.y].moves;
             user.map[user.level][nxt.x][nxt.y] = user.map[user.level][p.x][p.y];
             user.map[user.level][p.x][p.y] = '.';
-            user.theme[user.level][p.x][p.y] = get_theme(&user.map[user.level], user.theme[user.level], p.x, p.y);
             mark[nxt.x][nxt.y] = 1;
         }
     }
@@ -998,6 +1061,23 @@ void enemy_attack(struct Point p) {
     }
 }
 
+void change_music(char theme) {
+    terminate_music();
+    switch (theme) {
+        case 't':
+            play_song(genre, "treasure");
+            break;
+        case 'n':
+            play_song(genre, "nightmare");
+            break;
+        case 'e':
+            play_song(genre, "enchant");
+            break;
+        default:
+            play_song(genre, "main");
+    }
+}
+
 void play_game() {
     clear();
     int key;
@@ -1008,7 +1088,11 @@ void play_game() {
     init_time(&user, now);
     init_mark();
     init_enemy(user.pos);
+    int last_theme = 'r';
+    struct Point last_window = create_point(-1, -1);
+    int cycle = 0;
     do {
+        cycle = (cycle + 1) % (5000 / (1 + DIFFICULTY));
         time(&now);
         // refresh food
         refresh_food(&user, now);
@@ -1073,25 +1157,23 @@ void play_game() {
                 LAST_MESSAGE_REFRESH[1] = now;
             }
             else {
-                char c = get_theme(&user.map[user.level], user.theme[user.level], user.pos.x, user.pos.y);
+                char c = user.theme[user.level][user.pos.x][user.pos.y];
                 if (c != 'n') {
                     clean_area(create_point(1, 0), create_point(1, COLS - 1));
                     print_message_with_color(1, 0, "Food has been added to your bag!", 3);
                     LAST_MESSAGE_REFRESH[1] = now;
                     user.bag.production_date[user.bag.number_of_food] = now;
-                    user.bag.food[user.bag.number_of_food] = user.theme[user.level][user.pos.x][user.pos.y];
+                    user.bag.food[user.bag.number_of_food] = user.info[user.level][user.pos.x][user.pos.y];
                     ++user.bag.number_of_food;
                 }
-                user.theme[user.level][user.pos.x][user.pos.y] = c;
                 user.map[user.level][user.pos.x][user.pos.y] = '.';
             }
         }
         // weapon
         if (is_weapon(user.map[user.level][user.pos.x][user.pos.y]) && !is_gmove) {
-            char c = get_theme(&user.map[user.level], user.theme[user.level], user.pos.x, user.pos.y);
+            char c = user.theme[user.level][user.pos.x][user.pos.y];
             add_weapon(user.map[user.level][user.pos.x][user.pos.y]);
             user.map[user.level][user.pos.x][user.pos.y] = guess_char(&user.map[user.level], user.pos);
-            user.theme[user.level][user.pos.x][user.pos.y] = c;
         }
         // potion
         if (is_potion(user.map[user.level][user.pos.x][user.pos.y]) && !is_gmove) {
@@ -1101,7 +1183,7 @@ void play_game() {
         // trigger enemy
         trigger_enemy(user.pos);
         // move enemy
-        if (difftime(now, last_enemy_move) > 1) {
+        if (cycle == 0) {
             init_mark();
             move_enemy(user.pos);
             enemy_attack(user.pos);
@@ -1116,6 +1198,19 @@ void play_game() {
                 init_mark();
                 init_enemy(user.pos);
             }
+        }
+        // window
+        if (is_in_room(&user.map[user.level], user.pos)) {
+            struct Point cur_window = get_window(&user.map[user.level], user.pos);
+            if (last_window.x == -1 && cur_window.x != -1) {
+                init_mark();
+                appear_window(cur_window, get_window_dir(&user.map[user.level], cur_window));
+            }
+            else if (last_window.x != -1 && cur_window.x == -1) {
+                init_mark();
+                disappear_window(last_window, get_window_dir(&user.map[user.level], last_window));
+            }
+            last_window = cur_window;
         }
         // change level
         if (user.map[user.level][user.pos.x][user.pos.y] == '<') {
@@ -1138,6 +1233,7 @@ void play_game() {
             appear_nightmare(user.pos, 2);
         else
             appear_map(user.pos, 5);
+        
         print_map(&user, reveal);
         print_message_with_color(user.pos.x + ST_X, user.pos.y + ST_Y, "$", hero_color);
         print_status(&user);
@@ -1157,6 +1253,12 @@ void play_game() {
                 num_gmove = 0;
                 is_gmove = 0;
             }
+        }
+        // change music
+        int cur_theme = user.theme[user.level][user.pos.x][user.pos.y];
+        if (music_on && last_theme != cur_theme) {
+            change_music(cur_theme);
+            last_theme = cur_theme;
         }
         if (key == 'M')
             reveal = 1 - reveal;
@@ -1198,8 +1300,10 @@ void game_over() {
     mvprintw(x + 1, y, "Press any key to return to game menu ...");
     refresh();
     getch();
-    is_guest = 0;
+    is_guest = music_on = 0;
     last_dir = -1;
+    for (int level = 0; level < 4; level++)
+        init_user(&user, level);
     create_game_menu();
 }
 

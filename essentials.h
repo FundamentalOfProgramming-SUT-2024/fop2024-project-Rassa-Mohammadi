@@ -6,6 +6,7 @@
 #include <time.h>
 #include <locale.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 
 #define MAX_SIZE 150
 
@@ -77,6 +78,7 @@ struct User {
     struct Door door[5][MAX_SIZE][MAX_SIZE];
     struct Trap trap[5][MAX_SIZE][MAX_SIZE];
     struct Enemy enemy[5][MAX_SIZE][MAX_SIZE];
+    int info[5][MAX_SIZE][MAX_SIZE];
 };
 
 struct miniUser {
@@ -99,7 +101,7 @@ int D_Y[] = {0, 1, 0, -1, -1, 1, 1, -1};
 int number_of_rooms;
 struct Point* corners;
 char WEAPON[][20] = {"Mace", "Dagger", "Magic Wand", "Normal Arrow", "Sword"};
-char wEAPON[] = {'m', 'g', 'M', 'n', 'o'};
+char wEAPON[] = {'m', 'a', 'M', 'n', 'o'};
 int DAMAGE[] = {5, 12, 15, 5, 10};
 
 struct Point create_point(int x, int y) {
@@ -240,7 +242,7 @@ int is_wall(char c) {
 }
 
 int is_weapon(char c) {
-    return c == 'm' || c == 'g' || c == 'M' || c == 'n' || c == 'o'; // mace dagger Magic arrow sword
+    return c == 'm' || c == 'a' || c == 'M' || c == 'n' || c == 'o'; // mace dagger Magic arrow sword
 }
 
 int is_potion(char c) {
@@ -252,7 +254,9 @@ int is_enemy(char c) {
 }
 
 int is_in_room(char ***map, struct Point p) {
-    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f' || is_weapon((*map)[p.x][p.y]) || is_potion((*map)[p.x][p.y]) || is_enemy((*map)[p.x][p.y]);
+    if (!is_in_map(p))
+        return 0;
+    return (*map)[p.x][p.y] == '.' || (*map)[p.x][p.y] == 'O' || (*map)[p.x][p.y] == '<' || (*map)[p.x][p.y] == '>' || (*map)[p.x][p.y] == '^' || (*map)[p.x][p.y] == 'g' || (*map)[p.x][p.y] == 'f' || is_weapon((*map)[p.x][p.y]) || is_potion((*map)[p.x][p.y]) || is_enemy((*map)[p.x][p.y]) || (*map)[p.x][p.y] == 'T';
 }
 
 int is_new_room(struct User* user) {
@@ -267,7 +271,7 @@ int is_new_room(struct User* user) {
 int not_restricted(struct User* user, char ***map, struct Point p) {
     if (user->door[user->level][p.x][p.y].exist)
         return 1;
-    return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O' && (*map)[p.x][p.y] != ' ';
+    return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O' && (*map)[p.x][p.y] != ' ' && (*map)[p.x][p.y] != '=';
 }
 
 int get_dir(int key) {
@@ -380,22 +384,6 @@ int best_dir_snake(char ***map, struct Point p1, struct Point p2) {
             return dir;
     }
     return best_dir(map, p1, p2);
-}
-
-int get_theme(char ***map, int theme[MAX_SIZE][MAX_SIZE], int x, int y) {
-    struct Point cur = create_point(x, y);
-    if (is_in_room(map, cur)) {
-        while ((*map)[cur.x][cur.y] != '_' && (*map)[cur.x][cur.y] != '|' && (*map)[cur.x][cur.y] != '+' && (*map)[cur.x][cur.y] != '?')
-            cur = next_point(cur, 0);
-        return theme[cur.x][cur.y];
-    }
-    for (int dir = 0; dir < 8; dir++) {
-        int n_x = x + D_X[dir];
-        int n_y = y + D_Y[dir];
-        if (theme[n_x][n_y] >= 'a' && theme[n_x][n_y] <= 'z')
-            return theme[n_x][n_y];
-    }
-    return 'r';
 }
 
 int get_range(int id) {
@@ -583,4 +571,22 @@ char guess_char(char ***map, struct Point p) {
             return '#';
     }
     return '.';
+}
+
+struct Point get_window(char ***map, struct Point p) {
+    for (int dir = 0; dir < 4; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if ((*map)[nxt.x][nxt.y] == '=')
+            return nxt;
+    }
+    return create_point(-1, -1);
+}
+
+int get_window_dir(char ***map, struct Point p) {
+    for (int dir = 0; dir < 4; dir++) {
+        struct Point nxt = next_point(p, dir);
+        if (is_in_map(nxt), is_in_room(map, nxt))
+            return (dir + 2) % 4;
+    }
+    return -1;
 }
