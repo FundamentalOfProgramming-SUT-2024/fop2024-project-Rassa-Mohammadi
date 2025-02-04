@@ -431,12 +431,46 @@ void scoreboard_menu() {
     pregame_menu();
 }
 
+void profile_menu() {
+    clear();
+    curs_set(FALSE);
+    // if (is_guest) {
+    //     strcpy(user.username, "Guest");
+    //     strcpy(user.password, "-");
+    //     strcpy(user.email, "-");
+    // }
+    print_message_with_color(LINES / 3, COLS / 3, "User's Profile: ", 3);
+    print_message_with_color(LINES / 3 + 2, COLS / 3, "Username: ", 1);
+    if (is_guest)
+        print_message_with_color(LINES / 3 + 2, COLS / 3 + 11, "Guest", 6);
+    else
+        print_message_with_color(LINES / 3 + 2, COLS / 3 + 11, user.username, 6);
+    print_message_with_color(LINES / 3 + 4, COLS / 3, "Password: ", 1);
+    if (is_guest)
+        print_message_with_color(LINES / 3 + 4, COLS / 3 + 10, "-", 6);
+    else
+        print_message_with_color(LINES / 3 + 4, COLS / 3 + 10, user.password, 6);
+    print_message_with_color(LINES / 3 + 6, COLS / 3, "Email: ", 1);
+    if (is_guest)
+        print_message_with_color(LINES / 3 + 6, COLS / 3 + 7, "-", 6);
+    else
+        print_message_with_color(LINES / 3 + 6, COLS / 3 + 7, user.email, 6);
+    print_message_with_color(LINES / 3 + 8, COLS / 3, "Games Played: ", 1);
+    if (is_guest)
+        print_message_with_color(LINES / 3 + 8, COLS / 3 + 15, "-", 6);
+    else
+        print_number_with_color(LINES / 3 + 8, COLS / 3 + 15, user.number_of_games, 6);
+    print_message_with_color(LINES - 1, 0, "Press any key to return ...", 2);
+    getch(); 
+    pregame_menu();
+}
+
 void pregame_menu() {
     clear();
     curs_set(FALSE);
     noecho();
-    char *options[] = {"Load previous game", "Create new game", "Scoreboard", "Settings", "Back"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 5, 1);
+    char *options[] = {"Load previous game", "Create new game", "Profile", "Scoreboard", "Settings", "Back"};
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 6, 1);
     if (choice == 0) { // load game
         if (is_guest || !has_map(&user) || user.health <= 0 || user.theme[user.level][user.pos.x][user.pos.y] == 't') {
             clear();
@@ -451,9 +485,12 @@ void pregame_menu() {
         update_user(&user);
     }
     else if (choice == 2) {
+        profile_menu();
+    }
+    else if (choice == 3) {
         scoreboard_menu();
     }
-    else if (choice == 3) { // settings
+    else if (choice == 4) { // settings
         go_to_settings();
     }
     else {
