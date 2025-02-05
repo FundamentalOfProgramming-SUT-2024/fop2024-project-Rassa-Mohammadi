@@ -465,25 +465,29 @@ int best_dir_trap(char ***map, struct Point p1, struct Point p2) {
 }
 
 int best_dir_snake(char ***map, struct Point p1, struct Point p2) {
-    int cur_dist = get_dist(p1, p2);
+    int cur_dist = get_dist(p1, p2), res = -1;
     for (int dir = 4; dir < 8; dir++) {
         struct Point new_p = next_point(p1, dir);
         int new_dist = get_dist(new_p, p2);
-        if (new_dist < cur_dist && !are_equal(new_p, p2) && is_in_room(map, new_p) && (*map)[new_p.x][new_p.y] != '<' && (*map)[new_p.x][new_p.y] != '>' && (*map)[new_p.x][new_p.y] != 'O' && (*map)[new_p.x][new_p.y] != '^' && !is_enemy((*map)[new_p.x][new_p.y]))
-            return dir;
+        if (new_dist < cur_dist && !are_equal(new_p, p2) && is_in_room(map, new_p) && (*map)[new_p.x][new_p.y] != '<' && (*map)[new_p.x][new_p.y] != '>' && (*map)[new_p.x][new_p.y] != 'O' && (*map)[new_p.x][new_p.y] != '^' && !is_enemy((*map)[new_p.x][new_p.y])) {
+            res = dir;
+            cur_dist = new_dist;
+        }
     }
-    return best_dir(map, p1, p2);
+    return res == -1? best_dir(map, p1, p2): res;
 }
 
 int best_dir_snake_trap(char ***map, struct Point p1, struct Point p2) {
-    int cur_dist = get_dist(p1, p2);
+    int cur_dist = get_dist(p1, p2), res = -1;
     for (int dir = 4; dir < 8; dir++) {
         struct Point new_p = next_point(p1, dir);
         int new_dist = get_dist(new_p, p2);
-        if (new_dist < cur_dist && !are_equal(new_p, p2) && !is_wall((*map)[new_p.x][new_p.y]) && !is_enemy((*map)[new_p.x][new_p.y]))
-            return dir;
+        if (new_dist < cur_dist && !are_equal(new_p, p2) && !is_wall((*map)[new_p.x][new_p.y]) && !is_enemy((*map)[new_p.x][new_p.y])) {
+            res = dir;
+            cur_dist = new_dist;
+        }
     }
-    return best_dir_trap(map, p1, p2);
+    return res == -1? best_dir_trap(map, p1, p2): res;
 }
 
 int get_range(int id) {

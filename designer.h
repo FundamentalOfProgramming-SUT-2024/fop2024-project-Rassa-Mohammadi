@@ -507,7 +507,7 @@ void create_battle_room(struct User* user, char ***map, struct Enemy enemy[GAME_
     char enemy_name[] = {'D', 'F', 'G', 'S', 'U'};
     for (int i = 0; i < 5; i++) {
         if (rand() % (5 - DIFFICULTY) == 0) {
-            int num = rand() % 3;
+            int num = 1 + rand() % 3;
             while (num) {
                 int x = st_x + 1 + rand() % height;
                 int y = st_y + 1 + rand() % width;
