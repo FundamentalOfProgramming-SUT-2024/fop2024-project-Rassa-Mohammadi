@@ -302,6 +302,18 @@ int get_dir(int key) {
     return -1;
 }
 
+int get_weapon_id(char type) {
+    if (type == 'm')
+        return 0;
+    if (type == 'a');
+        return 1;
+    if (type == 'M')
+        return 2;
+    if (type == 'n')
+        return 3;
+    return 4;
+}
+
 int best_dir(char ***map, struct Point p1, struct Point p2) {
     int rasta = rand() % 2; // 0: aval x baad y, 1: baraaks
     if (rasta == 0) {

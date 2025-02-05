@@ -1147,6 +1147,9 @@ void attack(char ***map, int is_a_attack) {
             (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
             user.info[user.level][cur.x][cur.y] = 1;
         }
+        --user.bag.weapon[user.cur_weapon];
+        if (user.bag.weapon[user.cur_weapon] <= 0)
+            user.cur_weapon = -1;
     }
     else if (user.cur_weapon != -1) {
         for (int dir = 0; dir < 8; dir++) {
@@ -1178,7 +1181,7 @@ void attack_trap(char ***map, struct Enemy enemy[GAME_X][GAME_Y], int is_a_attac
         int dist = get_range(user.cur_weapon);
         struct Point cur = user.pos;
         struct Point nxt = next_point(cur, dir);
-        while (!is_enemy((*map)[cur.x][cur.y]) && !is_wall((*map)[cur.x][cur.y]) && dist > 0) {
+        while (!is_enemy((*map)[cur.x][cur.y]) && !is_wall((*map)[nxt.x][nxt.y]) && dist > 0) {
             --dist;
             cur = nxt;
             nxt = next_point(cur, dir);
@@ -1189,6 +1192,9 @@ void attack_trap(char ***map, struct Enemy enemy[GAME_X][GAME_Y], int is_a_attac
             LAST_MESSAGE_REFRESH[0] = time(NULL);
             (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
         }
+        --user.bag.weapon[user.cur_weapon];
+        if (user.bag.weapon[user.cur_weapon] <= 0)
+            user.cur_weapon = -1;
     }
     else if (user.cur_weapon != -1) {
         for (int dir = 0; dir < 8; dir++) {
@@ -1255,8 +1261,10 @@ void play_trap(struct Point p) {
         check_hunger(&user, now);
         timeout(0);
         // item
-        if (map[user.pos.x][user.pos.y] != '.' && !is_enemy(map[user.pos.x][user.pos.y]))
+        if (is_weapon(map[user.pos.x][user.pos.y])) {
+            ++user.bag.weapon[get_weapon_id(map[user.pos.x][user.pos.y])];
             map[user.pos.x][user.pos.y] = '.';
+        }
         // trigger enemy
         trigger_enemy_trap(&map, enemy);
         if (cycle == 0) {
