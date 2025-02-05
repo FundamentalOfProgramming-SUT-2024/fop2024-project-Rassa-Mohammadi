@@ -149,8 +149,8 @@ void password_recovery_page() {
         }
     }
     x += 3;
+    mvprintw(x, y, "Enter New Password:");
     while (true) {
-        mvprintw(x, y, "Enter New Password:");
         print_message_with_color(x + 2, y - 30, "Password must contain at least 7 characters, 1 number character, 1 capital letter and 1 small letter.", 2);
         print_message_with_color(x + 3, y, "To generate password press space button", 2);
         move(x + 1, y);
@@ -434,11 +434,6 @@ void scoreboard_menu() {
 void profile_menu() {
     clear();
     curs_set(FALSE);
-    // if (is_guest) {
-    //     strcpy(user.username, "Guest");
-    //     strcpy(user.password, "-");
-    //     strcpy(user.email, "-");
-    // }
     print_message_with_color(LINES / 3, COLS / 3, "User's Profile: ", 3);
     print_message_with_color(LINES / 3 + 2, COLS / 3, "Username: ", 1);
     if (is_guest)
@@ -460,6 +455,16 @@ void profile_menu() {
         print_message_with_color(LINES / 3 + 8, COLS / 3 + 15, "-", 6);
     else
         print_number_with_color(LINES / 3 + 8, COLS / 3 + 15, user.number_of_games, 6);
+    print_message_with_color(LINES / 3 + 10, COLS / 3, "Score: ", 1);
+    if (is_guest)
+        print_number_with_color(LINES / 3 + 10, COLS / 3 + 8, 0, 6);
+    else
+        print_number_with_color(LINES / 3 + 10, COLS / 3 + 8, user.score, 6);
+    print_message_with_color(LINES / 3 + 12, COLS / 3, "Golds: ", 1);
+    if (is_guest)
+        print_number_with_color(LINES / 3 + 12, COLS / 3 + 8, 0, 6);
+    else
+        print_number_with_color(LINES / 3 + 12, COLS / 3 + 8, user.golds, 6);
     print_message_with_color(LINES - 1, 0, "Press any key to return ...", 2);
     getch(); 
     pregame_menu();
@@ -470,7 +475,7 @@ void pregame_menu() {
     curs_set(FALSE);
     noecho();
     char *options[] = {"Load previous game", "Create new game", "Profile", "Scoreboard", "Settings", "Back"};
-    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 6, 1);
+    int choice = create_list(create_point(LINES / 4, COLS / 3), options, 6, 4);
     if (choice == 0) { // load game
         if (is_guest || !has_map(&user) || user.health <= 0 || user.theme[user.level][user.pos.x][user.pos.y] == 't') {
             clear();
@@ -570,73 +575,6 @@ void hunger_menu() {
     for (int i = choice; i < user.bag.number_of_food; i++)
         user.bag.food[i] = user.bag.food[i + 1];
     timeout(0);
-}
-
-int damage(char ***map, struct Point p) {
-    if (is_enemy((*map)[p.x][p.y])) {
-        user.enemy[user.level][p.x][p.y].health -= DAMAGE[user.cur_weapon] * POWER;
-        if (user.enemy[user.level][p.x][p.y].health <= 0)
-            user.enemy[user.level][p.x][p.y].health = user.enemy[user.level][p.x][p.y].moves = 0;
-        clean_area(create_point(1, 0), create_point(1, COLS - 1));
-        print_message_with_color(1, 0, "You hit the ", 3);
-        print_message_with_color(1, 13, get_enemy_name((*map)[p.x][p.y]), 2);
-        print_message_with_color(1, 35, "You need ", 3);
-        print_number_with_color(1, 45, user.enemy[user.level][p.x][p.y].health, 2);
-        print_message_with_color(1, 48, "more hits.", 3);
-        LAST_MESSAGE_REFRESH[1] = time(NULL);
-        if (user.enemy[user.level][p.x][p.y].health <= 0) {
-            clean_area(create_point(1, 0), create_point(1, COLS - 1));
-            print_message_with_color(1, 0, "You killed the ", 3);
-            print_message_with_color(1, 16, get_enemy_name((*map)[p.x][p.y]), 2);
-            LAST_MESSAGE_REFRESH[1] = time(NULL);
-            (*map)[p.x][p.y] = '.';
-        }
-        return 1;
-    }
-    return 0;
-}
-
-void attack(char ***map, int is_a_attack) {
-    if (user.cur_weapon != 0 && user.cur_weapon != 4) {
-        int dir;
-        if (is_a_attack)
-            dir = last_dir;
-        else {
-            timeout(-1);
-            int key = getch();
-            dir = get_dir(key);
-            timeout(0);
-        }
-        last_dir = dir;
-        if (dir == -1)
-            return;
-        int dist = get_range(user.cur_weapon);
-        struct Point cur = user.pos;
-        struct Point nxt = next_point(cur, dir);
-        while (!is_enemy((*map)[cur.x][cur.y]) && not_restricted(&user, map, nxt) && dist > 0) {
-            --dist;
-            cur = nxt;
-            nxt = next_point(cur, dir);
-        }
-        if (!damage(map, cur)) {
-            clean_area(create_point(0, 0), create_point(0, COLS - 1));
-            print_message_with_color(0, 0, "You missed your shot!", 2);
-            LAST_MESSAGE_REFRESH[0] = time(NULL);
-            (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
-            user.info[user.level][cur.x][cur.y] = 1;
-        }
-    }
-    else if (user.cur_weapon != -1) {
-        for (int dir = 0; dir < 8; dir++) {
-            struct Point nxt = next_point(user.pos, dir);
-            damage(map, nxt);
-        }
-    }
-    else {
-        clean_area(create_point(0, 0), create_point(0, COLS - 1));
-        print_message_with_color(0, 0, "You don't have a weapon in your hand. Please take a weapon from your bag.", 2);
-        LAST_MESSAGE_REFRESH[0] = time(NULL);
-    }
 }
 
 void consume_food(int x, time_t now) {
@@ -997,19 +935,6 @@ void disappear_window(struct Point p, int dir) {
     }
 }
 
-void play_trap(struct Point p) {
-    clear();
-    print_message_with_color(2, COLS / 3, "You fell into a trap!", 2);
-    int level = user.level;
-    user.health -= user.trap[level][p.x][p.y].damage;
-    user.map[level][p.x][p.y] = '^';
-    print_status(&user);
-    print_message_with_color(4, COLS / 3, "Press any key to return ...", 2);
-    timeout(-1);
-    getch();
-    clear();
-}
-
 int check_health() {
     if (user.health <= 0) {
         clear();
@@ -1060,6 +985,15 @@ void trigger_enemy(struct Point p) {
     }
 }
 
+void trigger_enemy_trap(char ***map, struct Enemy enemy[GAME_X][GAME_Y]) {
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(user.pos, dir);
+        if (is_in_map(nxt) && is_enemy((*map)[nxt.x][nxt.y]) && (*map)[nxt.x][nxt.y] != 'S' && enemy[nxt.x][nxt.y].moves == -1) {
+            enemy[nxt.x][nxt.y].moves = get_enemy_moves((*map)[nxt.x][nxt.y]);
+        }
+    }
+}
+
 void move_enemy(struct Point p) {
     mark[p.x][p.y] = 1;
     if (is_enemy(user.map[user.level][p.x][p.y]) && user.enemy[user.level][p.x][p.y].moves > 0) {
@@ -1084,17 +1018,188 @@ void move_enemy(struct Point p) {
     }
 }
 
+void move_enemy_trap(char ***map, struct Enemy enemy[GAME_X][GAME_Y]) {
+    for (int i = 0; i < GAME_X; i++)
+        for (int j = 0; j < GAME_Y; j++) {
+            if (mark[i][j])
+                continue;
+            if (is_enemy((*map)[i][j]) && enemy[i][j].moves > 0) {
+                int dir;
+                if ((*map)[i][j] == 'S')
+                    dir = best_dir_snake_trap(map, create_point(i, j), user.pos);
+                else
+                    dir = best_dir_trap(map, create_point(i, j), user.pos);
+                if (dir != -1) {
+                    struct Point nxt = next_point(create_point(i, j), dir);
+                    enemy[nxt.x][nxt.y] = enemy[i][j];
+                    --enemy[nxt.x][nxt.y].moves;
+                    (*map)[nxt.x][nxt.y] = (*map)[i][j];
+                    (*map)[i][j] = '.';
+                    mark[nxt.x][nxt.y] = 1;
+                }
+            }
+            mark[i][j] = 1;
+        }
+}
+
 void enemy_attack(struct Point p) {
     for (int dir = 0; dir < 8; dir++) {
         struct Point nxt = next_point(p, dir);
         if (is_enemy(user.map[user.level][nxt.x][nxt.y])) {
-            --user.health;
+            user.health -= DIFFICULTY + 1;
             clean_area(create_point(0, 0), create_point(0, COLS - 1));
             print_message_with_color(0, 0, "You have been hit. ", 2);
             print_number_with_color(0, 20, user.health, 3);
             print_message_with_color(0, 22, "health remains", 2);
             LAST_MESSAGE_REFRESH[0] = time(NULL);
         }
+    }
+}
+
+void enemy_attack_trap(char ***map) {
+    for (int dir = 0; dir < 8; dir++) {
+        struct Point nxt = next_point(user.pos, dir);
+        if (is_enemy((*map)[nxt.x][nxt.y])) {
+            user.health -= DIFFICULTY + 1;
+            clean_area(create_point(0, 0), create_point(0, COLS - 1));
+            print_message_with_color(0, 0, "You have been hit. ", 2);
+            print_number_with_color(0, 20, user.health, 3);
+            print_message_with_color(0, 22, "health remains", 2);
+            LAST_MESSAGE_REFRESH[0] = time(NULL);
+        }
+    }
+}
+
+int damage(char ***map, struct Point p) {
+    if (is_enemy((*map)[p.x][p.y])) {
+        user.enemy[user.level][p.x][p.y].health -= DAMAGE[user.cur_weapon] * POWER;
+        if (user.enemy[user.level][p.x][p.y].health <= 0)
+            user.enemy[user.level][p.x][p.y].health = user.enemy[user.level][p.x][p.y].moves = 0;
+        clean_area(create_point(1, 0), create_point(1, COLS - 1));
+        print_message_with_color(1, 0, "You hit the ", 3);
+        print_message_with_color(1, 13, get_enemy_name((*map)[p.x][p.y]), 2);
+        print_message_with_color(1, 35, "You need ", 3);
+        print_number_with_color(1, 45, user.enemy[user.level][p.x][p.y].health, 2);
+        print_message_with_color(1, 48, "more hits.", 3);
+        LAST_MESSAGE_REFRESH[1] = time(NULL);
+        if (user.enemy[user.level][p.x][p.y].health <= 0) {
+            clean_area(create_point(1, 0), create_point(1, COLS - 1));
+            print_message_with_color(1, 0, "You killed the ", 3);
+            print_message_with_color(1, 16, get_enemy_name((*map)[p.x][p.y]), 2);
+            LAST_MESSAGE_REFRESH[1] = time(NULL);
+            (*map)[p.x][p.y] = '.';
+        }
+        return 1;
+    }
+    return 0;
+}
+
+int damage_trap(char ***map, struct Enemy enemy[GAME_X][GAME_Y], struct Point p) {
+    if (is_enemy((*map)[p.x][p.y])) {
+        enemy[p.x][p.y].health -= DAMAGE[user.cur_weapon] * POWER;
+        if (enemy[p.x][p.y].health <= 0)
+            enemy[p.x][p.y].health = enemy[p.x][p.y].moves = 0;
+        clean_area(create_point(1, 0), create_point(1, COLS - 1));
+        print_message_with_color(1, 0, "You hit the ", 3);
+        print_message_with_color(1, 13, get_enemy_name((*map)[p.x][p.y]), 2);
+        print_message_with_color(1, 35, "You need ", 3);
+        print_number_with_color(1, 45, enemy[p.x][p.y].health, 2);
+        print_message_with_color(1, 48, "more hits.", 3);
+        LAST_MESSAGE_REFRESH[1] = time(NULL);
+        if (enemy[p.x][p.y].health <= 0) {
+            clean_area(create_point(1, 0), create_point(1, COLS - 1));
+            print_message_with_color(1, 0, "You killed the ", 3);
+            print_message_with_color(1, 16, get_enemy_name((*map)[p.x][p.y]), 2);
+            LAST_MESSAGE_REFRESH[1] = time(NULL);
+            (*map)[p.x][p.y] = '.';
+        }
+        return 1;
+    }
+    return 0;
+}
+
+void attack(char ***map, int is_a_attack) {
+    if (user.cur_weapon != 0 && user.cur_weapon != 4) {
+        int dir;
+        if (is_a_attack)
+            dir = last_dir;
+        else {
+            timeout(-1);
+            int key = getch();
+            dir = get_dir(key);
+            timeout(0);
+        }
+        last_dir = dir;
+        if (dir == -1)
+            return;
+        int dist = get_range(user.cur_weapon);
+        struct Point cur = user.pos;
+        struct Point nxt = next_point(cur, dir);
+        while (!is_enemy((*map)[cur.x][cur.y]) && not_restricted(&user, map, nxt) && dist > 0) {
+            --dist;
+            cur = nxt;
+            nxt = next_point(cur, dir);
+        }
+        if (!damage(map, cur)) {
+            clean_area(create_point(0, 0), create_point(0, COLS - 1));
+            print_message_with_color(0, 0, "You missed your shot!", 2);
+            LAST_MESSAGE_REFRESH[0] = time(NULL);
+            (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
+            user.info[user.level][cur.x][cur.y] = 1;
+        }
+    }
+    else if (user.cur_weapon != -1) {
+        for (int dir = 0; dir < 8; dir++) {
+            struct Point nxt = next_point(user.pos, dir);
+            damage(map, nxt);
+        }
+    }
+    else {
+        clean_area(create_point(0, 0), create_point(0, COLS - 1));
+        print_message_with_color(0, 0, "You don't have a weapon in your hand. Please take a weapon from your bag.", 2);
+        LAST_MESSAGE_REFRESH[0] = time(NULL);
+    }
+}
+
+void attack_trap(char ***map, struct Enemy enemy[GAME_X][GAME_Y], int is_a_attack) {
+    if (user.cur_weapon != 0 && user.cur_weapon != 4) {
+        int dir;
+        if (is_a_attack)
+            dir = last_dir;
+        else {
+            timeout(-1);
+            int key = getch();
+            dir = get_dir(key);
+            timeout(0);
+        }
+        last_dir = dir;
+        if (dir == -1)
+            return;
+        int dist = get_range(user.cur_weapon);
+        struct Point cur = user.pos;
+        struct Point nxt = next_point(cur, dir);
+        while (!is_enemy((*map)[cur.x][cur.y]) && !is_wall((*map)[cur.x][cur.y]) && dist > 0) {
+            --dist;
+            cur = nxt;
+            nxt = next_point(cur, dir);
+        }
+        if (!damage_trap(map, enemy, cur)) {
+            clean_area(create_point(0, 0), create_point(0, COLS - 1));
+            print_message_with_color(0, 0, "You missed your shot!", 2);
+            LAST_MESSAGE_REFRESH[0] = time(NULL);
+            (*map)[cur.x][cur.y] = wEAPON[user.cur_weapon];
+        }
+    }
+    else if (user.cur_weapon != -1) {
+        for (int dir = 0; dir < 8; dir++) {
+            struct Point nxt = next_point(user.pos, dir);
+            damage_trap(map, enemy, nxt);
+        }
+    }
+    else {
+        clean_area(create_point(0, 0), create_point(0, COLS - 1));
+        print_message_with_color(0, 0, "You don't have a weapon in your hand. Please take a weapon from your bag.", 2);
+        LAST_MESSAGE_REFRESH[0] = time(NULL);
     }
 }
 
@@ -1115,13 +1220,87 @@ void change_music(char theme) {
     }
 }
 
+void play_trap(struct Point p) {
+    clear();
+    char **map;
+    map = malloc(GAME_X * sizeof(char *));
+    for (int i = 0; i < GAME_X; i++)
+        map[i] = malloc(GAME_Y * sizeof(char));
+    struct Enemy enemy[GAME_X][GAME_Y];
+    create_battle_room(&user, &map, enemy);
+    print_message_with_color(2, COLS / 3, "You fell into a trap!", 2);
+    int cycle = 0;
+    time_t now;
+    while (has_enemy(&map)) {
+        time(&now);
+        cycle = (cycle + 1) % (5000 / (1 + DIFFICULTY));
+        // refresh food
+        refresh_food(&user, now);
+        // recover health
+        recover_health(&user, now);
+        // refresh recovery
+        if (RECOVERY == 1 && health_boost <= 0)
+            RECOVERY = 2;
+        // refresh speed
+        if (speed == 2 && speed_boost <= 0)
+            speed = 1;
+        // refresh power
+        if (POWER = 2 && power_boost <= 0)
+            POWER = 1;
+        // messages
+        for (int line = 0; line < 3; line++)
+            if (refresh_message(now, line))
+                clean_area(create_point(line, 0), create_point(line, COLS - 1));
+        // hunger
+        check_hunger(&user, now);
+        timeout(0);
+        // item
+        if (map[user.pos.x][user.pos.y] != '.' && !is_enemy(map[user.pos.x][user.pos.y]))
+            map[user.pos.x][user.pos.y] = '.';
+        // trigger enemy
+        trigger_enemy_trap(&map, enemy);
+        if (cycle == 0) {
+            --speed_boost;
+            --health_boost;
+            --power_boost;
+            init_mark();
+            move_enemy_trap(&map, enemy);
+            enemy_attack_trap(&map);
+        }
+        check_health();
+        // print map
+        print_map_trap(&map);
+        print_message_with_color(user.pos.x + ST_X, user.pos.y + ST_Y, "$", hero_color);
+        print_status(&user);
+        refresh();
+        int key = getch();
+        move_player(key, &map);
+        if (key == 'E')
+            hunger_menu(now);
+        if (key == 'i')
+            weapon_menu();
+        if (key == 'p')
+            potion_menu();
+        if (key == 'w')
+            user.cur_weapon = -1;
+        if (key >= '1' && key <= '5')
+            change_weapon(key - '1', now);
+        if (key == ' ')
+            attack_trap(&map, enemy, 0);
+        if (key == 'a')
+            attack_trap(&map, enemy, 1);
+    }
+    user.map[user.level][p.x][p.y] = '^';
+    timeout(-1);
+    clear();
+}
+
 void play_game() {
     clear();
     int key;
-    time_t now, st_enchant, last_enemy_move;
+    time_t now, st_enchant;
     int is_in_enchant = 0, is_gmove = 0, num_gmove = 0;
     time(&now);
-    last_enemy_move = now;
     init_time(&user, now);
     init_mark();
     init_enemy(user.pos);
@@ -1172,8 +1351,11 @@ void play_game() {
             init_enemy(user.pos);
         }
         // trap
-        if (user.trap[user.level][user.pos.x][user.pos.y].exist)
+        if (user.trap[user.level][user.pos.x][user.pos.y].exist) {
+            struct Point pos_copy = user.pos;
             play_trap(create_point(user.pos.x, user.pos.y));
+            user.pos = pos_copy;
+        }
         check_health();
         // gold
         if (user.map[user.level][user.pos.x][user.pos.y] == 'g' && !is_gmove) {
@@ -1231,7 +1413,6 @@ void play_game() {
             init_mark();
             move_enemy(user.pos);
             enemy_attack(user.pos);
-            last_enemy_move = now;
         }
         // enter new room
         if (user.map[user.level][user.pos.x][user.pos.y] == '?' || user.map[user.level][user.pos.x][user.pos.y] == '+' || user.map[user.level][user.pos.x][user.pos.y] == '_' || user.map[user.level][user.pos.x][user.pos.y] == '|') {
@@ -1341,7 +1522,7 @@ void game_over() {
     curs_set(FALSE);
     int x = LINES / 3, y = COLS / 3;
     print_message_with_color(x, y, "Game over!", 2);
-    mvprintw(x + 1, y, "Press any key to return to game menu ...");
+    mvprintw(x + 2, y, "Press any key to return to game menu ...");
     refresh();
     getch();
     is_guest = 0;

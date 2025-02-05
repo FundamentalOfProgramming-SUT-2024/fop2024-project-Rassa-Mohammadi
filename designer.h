@@ -488,6 +488,40 @@ void add_treasure(char ***map, struct Room *room) {
     }
 }
 
+void create_battle_room(struct User* user, char ***map, struct Enemy enemy[GAME_X][GAME_Y]) {
+    for (int i = 0; i < GAME_X; i++)
+        for (int j = 0; j < GAME_Y; j++)
+            (*map)[i][j] = ' ';
+    int height = 4 + rand() % 3, width = 10 + rand() % 15;
+    int st_x = rand() % (GAME_X - height - 2), st_y = rand() % (GAME_Y - width - 2);
+    user->pos = create_point(st_x + 1, st_y + 1);
+    for (int j = 0; j < width + 2; j++)
+        (*map)[st_x][st_y + j] = '_';
+    for (int j = 1; j < width + 1; j++)
+        (*map)[st_x + height + 1][st_y + j] = '_';
+    for (int i = 1; i < height + 2; i++)
+        (*map)[st_x + i][st_y] = (*map)[st_x + i][st_y + width + 1] = '|';
+    for (int i = 1; i < height + 1; i++)
+        for (int j = 1; j < width + 1; j++)
+            (*map)[st_x + i][st_y + j] = '.';
+    char enemy_name[] = {'D', 'F', 'G', 'S', 'U'};
+    for (int i = 0; i < 5; i++) {
+        if (rand() % (5 - DIFFICULTY) == 0) {
+            int num = rand() % 3;
+            while (num) {
+                int x = st_x + 1 + rand() % height;
+                int y = st_y + 1 + rand() % width;
+                if ((*map)[x][y] == '.' && (user->pos.x != x || user->pos.y != y)) {
+                    (*map)[x][y] = enemy_name[i];
+                    enemy[x][y].health = get_enemy_health(enemy_name[i]);
+                    enemy[x][y].moves = (i != 3? -1: get_enemy_moves(enemy_name[i]));
+                    --num;
+                }
+            }
+        }
+    }
+}
+
 void generate_map(struct User* user) {
     clear();
     print_message_with_color(LINES / 3, COLS / 3 - 10, "It may take up to 90 seconds. Thank you for your patience.", 3);
@@ -571,7 +605,7 @@ void create_treasure_room(struct User* user) {
     // create map
     struct Room room;
     room.type = 't';
-    room.p = create_point(10, 20);
+    room.p = create_point(GAME_X / 4,GAME_Y / 4);
     room.height = GAME_X / 2; 
     room.width = GAME_Y / 2;
     draw_room(&user->map[user->level], &room);
@@ -666,6 +700,35 @@ void print_map(struct User* user, int reveal) {
             }
             else
                 mvprintw(i + ST_X, j + ST_Y, " ");
+        }
+}
+
+void print_map_trap(char ***map) {
+    for (int i = 0; i < GAME_X; i++)
+        for (int j = 0; j < GAME_Y; j++) {
+            if (is_enemy((*map)[i][j])) {
+                print_character_with_color(i + ST_X, j + ST_Y, (*map)[i][j], 2);
+            }
+            else if (is_weapon((*map)[i][j])) {
+                char c = (*map)[i][j];
+                if (c == 'm') {
+                    print_message_with_color(i + ST_X, j + ST_Y, "⚒", 6);
+                }
+                else if (c == 'a') {
+                    print_message_with_color(i + ST_X, j + ST_Y, "🗡", 6);
+                }
+                else if (c ==  'M') {
+                    print_message_with_color(i + ST_X, j + ST_Y, "\u269A", 6);
+                }
+                else if (c == 'n') {
+                    print_message_with_color(i + ST_X, j + ST_Y, "➳", 6);
+                }
+                else {
+                    print_message_with_color(i + ST_X, j + ST_Y, "⚔", 6);
+                }
+            }
+            else
+                mvprintw(i + ST_X, j + ST_Y, "%c", (*map)[i][j]);
         }
 }
 

@@ -274,6 +274,14 @@ int not_restricted(struct User* user, char ***map, struct Point p) {
     return (*map)[p.x][p.y] != '_' && (*map)[p.x][p.y] != '|' && (*map)[p.x][p.y] != 'O' && (*map)[p.x][p.y] != ' ' && (*map)[p.x][p.y] != '=';
 }
 
+int has_enemy(char ***map) {
+    for (int i = 0; i < GAME_X; i++)
+        for (int j = 0; j < GAME_Y; j++)
+            if (is_enemy((*map)[i][j]))
+                return 1;
+    return 0;
+}
+
 int get_dir(int key) {
     if (key == KEY_UP || key == 'j')
         return 0;
@@ -375,6 +383,87 @@ int best_dir(char ***map, struct Point p1, struct Point p2) {
     return -1;
 }
 
+int best_dir_trap(char ***map, struct Point p1, struct Point p2) {
+    int rasta = rand() % 2; // 0: aval x baad y, 1: baraaks
+    if (rasta == 0) {
+        if (p1.x < p2.x && !are_equal(create_point(p1.x + 1, p1.y), p2)) { // down
+            struct Point nxt = next_point(p1, 2);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.x > p2.x && !are_equal(create_point(p1.x - 1, p1.y), p2)) { // up
+            struct Point nxt = next_point(p1, 0);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+        }
+        if (p1.y < p2.y && !are_equal(create_point(p1.x, p1.y + 1), p2)) { // right
+            struct Point nxt = next_point(p1, 1);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+        }
+        if (p1.y > p2.y && !are_equal(create_point(p1.x, p1.y - 1), p2)) { // left
+            struct Point nxt = next_point(p1, 3);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
+        if (p1.x == p2.x) {
+            struct Point nxt = next_point(p1, 0);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+            nxt = next_point(p1, 2);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.y == p2.y) {
+            struct Point nxt = next_point(p1, 1);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+            nxt = next_point(p1, 3);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
+    }
+    else {
+        if (p1.y < p2.y && !are_equal(create_point(p1.x, p1.y + 1), p2)) { // right
+            struct Point nxt = next_point(p1, 1);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+        }
+        if (p1.y > p2.y && !are_equal(create_point(p1.x, p1.y - 1), p2)) { // left
+            struct Point nxt = next_point(p1, 3);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
+        if (p1.x < p2.x && !are_equal(create_point(p1.x + 1, p1.y), p2)) { // down
+            struct Point nxt = next_point(p1, 2);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.x > p2.x && !are_equal(create_point(p1.x - 1, p1.y), p2)) { // up
+            struct Point nxt = next_point(p1, 0);
+            if (!is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+        }
+        if (p1.x == p2.x) {
+            struct Point nxt = next_point(p1, 0);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 0;
+            nxt = next_point(p1, 2);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 2;
+        }
+        if (p1.y == p2.y) {
+            struct Point nxt = next_point(p1, 1);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 1;
+            nxt = next_point(p1, 3);
+            if (!are_equal(nxt, p2) && !is_wall((*map)[nxt.x][nxt.y]) && !is_enemy((*map)[nxt.x][nxt.y]))
+                return 3;
+        }
+    }
+    return -1;
+}
+
 int best_dir_snake(char ***map, struct Point p1, struct Point p2) {
     int cur_dist = get_dist(p1, p2);
     for (int dir = 4; dir < 8; dir++) {
@@ -384,6 +473,17 @@ int best_dir_snake(char ***map, struct Point p1, struct Point p2) {
             return dir;
     }
     return best_dir(map, p1, p2);
+}
+
+int best_dir_snake_trap(char ***map, struct Point p1, struct Point p2) {
+    int cur_dist = get_dist(p1, p2);
+    for (int dir = 4; dir < 8; dir++) {
+        struct Point new_p = next_point(p1, dir);
+        int new_dist = get_dist(new_p, p2);
+        if (new_dist < cur_dist && !are_equal(new_p, p2) && !is_wall((*map)[new_p.x][new_p.y]) && !is_enemy((*map)[new_p.x][new_p.y]))
+            return dir;
+    }
+    return best_dir_trap(map, p1, p2);
 }
 
 int get_range(int id) {
